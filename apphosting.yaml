@@ -1,0 +1,26 @@
+# Firebase App Hosting configuration.
+# Runs the Next.js server (App Router + /api routes) on Cloud Run.
+# Docs: https://firebase.google.com/docs/app-hosting/configure
+
+runConfig:
+  minInstances: 0 # scale to zero when idle (no cost between visits)
+  maxInstances: 2
+  concurrency: 80
+
+env:
+  # NWS requires a User-Agent with contact info. Edit the contact before deploy.
+  - variable: NWS_USER_AGENT
+    value: "ChicagoHarborSailing/1.0 (you@example.com)"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # Optional — turns on the historical record + secured cron poll.
+  # Create the secrets first, then uncomment:
+  #   firebase apphosting:secrets:set DATABASE_URL   # your Neon Postgres URL
+  #   firebase apphosting:secrets:set CRON_SECRET    # any random string
+  #
+  # - variable: DATABASE_URL
+  #   secret: DATABASE_URL
+  # - variable: CRON_SECRET
+  #   secret: CRON_SECRET
