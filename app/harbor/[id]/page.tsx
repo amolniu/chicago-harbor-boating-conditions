@@ -13,9 +13,11 @@ import { getHarbor } from "@/lib/harbors";
 import { getBoat } from "@/lib/boats";
 import { rate } from "@/lib/rating";
 import { computeWindow } from "@/lib/window";
+import { harborIntel } from "@/lib/intel";
 import { degToCompass } from "@/lib/units";
 import { fmtLocalTime } from "@/lib/astro";
 import type { Conditions, ForecastHour } from "@/lib/types";
+import type { IntelSeverity } from "@/lib/intel";
 import type { WindPoint } from "@/lib/ndbc";
 
 interface Bundle {
@@ -35,6 +37,12 @@ const ADVISORY_LABEL: Record<string, string> = {
   small_craft: "Small Craft Advisory",
   gale: "Gale Warning",
   storm: "Storm Warning",
+};
+
+const SEV: Record<IntelSeverity, { dot: string; label: string; text: string }> = {
+  ok: { dot: "bg-emerald-400", label: "Clear", text: "text-emerald-300" },
+  watch: { dot: "bg-amber-400", label: "Watch", text: "text-amber-300" },
+  alert: { dot: "bg-rose-500", label: "Caution", text: "text-rose-300" },
 };
 
 export default function HarborDetail() {
@@ -64,10 +72,11 @@ export default function HarborDetail() {
       b && harbor ? computeWindow(harbor, b.forecast, boat, skill, new Date(b.sun.sunrise), new Date(b.sun.sunset)) : null,
     [b, harbor, boat, skill],
   );
+  const intel = useMemo(() => (b && harbor ? harborIntel(harbor, b.conditions, boat, skill) : null), [b, harbor, boat, skill]);
 
   if (!harbor) return <NotFound />;
   if (error) return <Message>Couldn&apos;t load this harbor&apos;s data. Try again shortly.</Message>;
-  if (!b || !rating || !sail) return <Loading name={harbor.name} />;
+  if (!b || !rating || !sail || !intel) return <Loading name={harbor.name} />;
 
   const c = b.conditions;
   const meta = STATUS_META[rating.status];
@@ -121,6 +130,30 @@ export default function HarborDetail() {
           </p>
         </Panel>
 
+        {/* Harbor intelligence — condition-aware */}
+        <Panel title="Harbor intelligence" className="lg:col-span-2">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {intel.map((it) => {
+              const s = SEV[it.severity];
+              return (
+                <div key={it.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${s.dot}`} />
+                    <span className="text-sm font-semibold text-slate-200">{it.label}</span>
+                    <span className={`ml-auto text-[10px] font-medium uppercase tracking-wide ${s.text}`}>{s.label}</span>
+                  </div>
+                  <p className="mt-1.5 text-sm text-slate-200">{it.impact}</p>
+                  {it.note && <p className="mt-1 text-xs text-slate-500">{it.note}</p>}
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-3 text-[11px] text-slate-500">
+            Live reads combine the current conditions with {harbor.name}&apos;s exposure model, rated for your boat +
+            skill. The grey local notes are seed knowledge, refined over time with sailor input.
+          </p>
+        </Panel>
+
         {/* Live wind */}
         <Panel title="Live wind — last 24 h">
           <WindChart data={b.windHistory} />
@@ -151,16 +184,6 @@ export default function HarborDetail() {
             Zone {harbor.marineZone} · advisory:{" "}
             <b className="text-slate-300">{c.advisory === "none" ? "none" : ADVISORY_LABEL[c.advisory]}</b>
           </p>
-        </Panel>
-
-        {/* Harbor intelligence */}
-        <Panel title="Harbor intelligence">
-          <ul className="space-y-2 text-sm">
-            <Note label="Entrance" text={b.notes.entrance} />
-            <Note label="Docking" text={b.notes.docking} />
-            <Note label="Hazards" text={b.notes.hazards} />
-          </ul>
-          <p className="mt-3 text-[11px] text-slate-500">Seed local knowledge — refined over time with sailor input.</p>
         </Panel>
 
         {/* Radar */}
@@ -211,14 +234,6 @@ function Stat({ label, value }: { label: string; value: string }) {
       <dt className="text-[11px] uppercase tracking-wide text-slate-500">{label}</dt>
       <dd className="font-medium text-slate-200">{value}</dd>
     </div>
-  );
-}
-
-function Note({ label, text }: { label: string; text: string }) {
-  return (
-    <li>
-      <span className="font-semibold text-slate-300">{label}:</span> <span className="text-slate-400">{text}</span>
-    </li>
   );
 }
 

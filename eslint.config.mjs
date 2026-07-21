@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Deploy artifacts (generated bundles — not our source):
+    ".firebase/**",
+    ".vercel/**",
   ]),
 ]);
 
