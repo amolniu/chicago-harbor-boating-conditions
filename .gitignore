@@ -37,6 +37,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# firebase (deploy artifacts / logs — do not commit)
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+.runtimeconfig.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
