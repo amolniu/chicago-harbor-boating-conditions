@@ -15,34 +15,65 @@ import { harborSnapshots, observations, type ObservationRow } from "@/db/schema"
 
 const PRIMARY_WAVE_STATION = "45198"; // Chicago Buoy — full wave spectra
 
+// Ordered wind fallbacks used when a harbor's own station has no wind (e.g. buoy
+// 45198's anemometer drops out while its wave sensor keeps reporting). All the
+// Chicago stations are within ~10 km, so a neighbor is a fair wind proxy — far
+// better than going dark. CNII2 (Northerly Island) sits next to the downtown
+// harbors, so it leads.
+const WIND_FALLBACK = ["CNII2", "CHII2", "45198", "CMTI2"];
+
+const uniq = (arr: string[]) => Array.from(new Set(arr));
+
 export interface HarborConditions {
   id: string;
   name: string;
   conditions: Conditions;
 }
 
-function assemble(harbor: Harbor, near: BuoyCurrent | null, wave: BuoyCurrent | null, advisory: Conditions["advisory"]): Conditions {
-  const pick = (k: keyof BuoyCurrent) => (near?.[k] ?? wave?.[k] ?? null) as number | null;
-  const windFromNear = near?.windKt != null;
+/** First station in `stations` that has a non-null value for `key`. */
+function pickField(
+  buoys: Map<string, BuoyCurrent | null>,
+  stations: string[],
+  key: keyof BuoyCurrent,
+): { value: number | null; station: string | null } {
+  for (const s of stations) {
+    const v = buoys.get(s)?.[key];
+    if (v != null) return { value: v as number, station: s };
+  }
+  return { value: null, station: null };
+}
+
+function assemble(harbor: Harbor, buoys: Map<string, BuoyCurrent | null>, advisory: Conditions["advisory"]): Conditions {
+  const windChain = uniq([harbor.buoyStation, ...WIND_FALLBACK]);
+  // Waves + temps prefer the harbor's own station, then the primary wave buoy.
+  const dataChain = uniq([harbor.buoyStation, PRIMARY_WAVE_STATION, ...WIND_FALLBACK]);
+
+  // Wind dir/speed/gust must come from one station for consistency.
+  const wind = pickField(buoys, windChain, "windKt");
+  const wb = wind.station ? buoys.get(wind.station) : null;
+
+  const wave = pickField(buoys, dataChain, "waveFt");
+  const wvb = wave.station ? buoys.get(wave.station) : null;
+
   return {
-    windDir: pick("windDir"),
-    windKt: pick("windKt"),
-    gustKt: pick("gustKt"),
-    waveFt: (near?.waveFt ?? wave?.waveFt) ?? null,
-    wavePeriodS: (near?.wavePeriodS ?? wave?.wavePeriodS) ?? null,
-    waveDir: (near?.waveDir ?? wave?.waveDir) ?? null,
-    waterTempF: pick("waterTempF"),
-    airTempF: pick("airTempF"),
+    windDir: wb?.windDir ?? null,
+    windKt: wind.value,
+    gustKt: wb?.gustKt ?? null,
+    waveFt: wave.value,
+    wavePeriodS: wvb?.wavePeriodS ?? null,
+    waveDir: wvb?.waveDir ?? null,
+    waterTempF: pickField(buoys, dataChain, "waterTempF").value,
+    airTempF: pickField(buoys, dataChain, "airTempF").value,
     advisory,
-    source: windFromNear ? harbor.buoyStation : PRIMARY_WAVE_STATION,
-    observedAt: near?.observedAt ?? wave?.observedAt ?? null,
+    source: wind.station ?? wave.station ?? harbor.buoyStation,
+    observedAt: wb?.observedAt ?? wvb?.observedAt ?? null,
   };
 }
 
 /** Live conditions for every harbor. Fetches each unique station/zone once. */
 export async function getAllConditions(): Promise<HarborConditions[]> {
-  const stations = Array.from(new Set([...HARBORS.map((h) => h.buoyStation), PRIMARY_WAVE_STATION]));
-  const zones = Array.from(new Set(HARBORS.map((h) => h.marineZone)));
+  const stations = uniq([...HARBORS.map((h) => h.buoyStation), PRIMARY_WAVE_STATION, ...WIND_FALLBACK]);
+  const zones = uniq(HARBORS.map((h) => h.marineZone));
 
   const [buoyEntries, marineEntries] = await Promise.all([
     Promise.all(stations.map(async (s) => [s, await getBuoyCurrent(s)] as const)),
@@ -50,24 +81,22 @@ export async function getAllConditions(): Promise<HarborConditions[]> {
   ]);
   const buoys = new Map(buoyEntries);
   const advisories = new Map(marineEntries);
-  const wave = buoys.get(PRIMARY_WAVE_STATION) ?? null;
 
   return HARBORS.map((h) => ({
     id: h.id,
     name: h.name,
-    conditions: assemble(h, buoys.get(h.buoyStation) ?? null, wave, advisories.get(h.marineZone) ?? "none"),
+    conditions: assemble(h, buoys, advisories.get(h.marineZone) ?? "none"),
   }));
 }
 
 /** Conditions for a single harbor (detail page). */
 export async function getHarborConditions(harbor: Harbor): Promise<Conditions> {
-  const [near, wave, marine] = await Promise.all([
-    getBuoyCurrent(harbor.buoyStation),
-    harbor.buoyStation === PRIMARY_WAVE_STATION ? Promise.resolve(null) : getBuoyCurrent(PRIMARY_WAVE_STATION),
+  const stations = uniq([harbor.buoyStation, PRIMARY_WAVE_STATION, ...WIND_FALLBACK]);
+  const [buoyEntries, marine] = await Promise.all([
+    Promise.all(stations.map(async (s) => [s, await getBuoyCurrent(s)] as const)),
     getMarineForecast(harbor.marineZone),
   ]);
-  const waveSrc = harbor.buoyStation === PRIMARY_WAVE_STATION ? near : wave;
-  return assemble(harbor, near, waveSrc, marine.advisory);
+  return assemble(harbor, new Map(buoyEntries), marine.advisory);
 }
 
 /** Persist a snapshot per harbor (baseline status = default sailor). No-op without a DB. */

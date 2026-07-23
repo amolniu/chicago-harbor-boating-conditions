@@ -98,7 +98,9 @@ export default function HarborDetail() {
           <div className="text-right text-xs text-slate-500">
             <div className="font-mono text-2xl text-slate-200">{rating.status === "unknown" ? "—" : rating.score}</div>
             <div>
-              {c.source} · {c.observedAt ? fmtLocalTime(new Date(c.observedAt)) : "—"}
+              {c.source}
+              {c.source !== harbor.buoyStation ? " (nearby)" : ""} ·{" "}
+              {c.observedAt ? fmtLocalTime(new Date(c.observedAt)) : "—"}
             </div>
           </div>
         </div>
