@@ -26,9 +26,18 @@ export interface Conditions {
   source: string;
   /** ISO timestamp of the underlying observation. */
   observedAt: string | null;
+  /** Regional HRRR thunderstorm/convective outlook (same across nearby harbors). */
+  storm?: StormRisk;
 }
 
 export type Advisory = "none" | "small_craft" | "gale" | "storm";
+
+/** Compact HRRR storm signal carried on Conditions (see lib/storm.ts). */
+export interface StormRisk {
+  level: "none" | "watch" | "elevated" | "active";
+  headline: string;
+  capeNow: number | null;
+}
 
 /** A single hour of forecast, used by the sail-window engine. */
 export interface ForecastHour {

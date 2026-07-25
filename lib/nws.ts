@@ -3,15 +3,46 @@
 
 import { Advisory, ForecastHour } from "./types";
 import { estimateWaveFt } from "./window";
+import { M_TO_FT } from "./units";
 
 const UA = process.env.NWS_USER_AGENT || "ChicagoHarborSailing/0.1 (set NWS_USER_AGENT)";
 
-const CARDINAL: Record<string, number> = {
-  N: 0, NNE: 22.5, NE: 45, ENE: 67.5, E: 90, ESE: 112.5, SE: 135, SSE: 157.5,
-  S: 180, SSW: 202.5, SW: 225, WSW: 247.5, W: 270, WNW: 292.5, NW: 315, NNW: 337.5,
-};
+const KMH_TO_KT = 0.539957;
 
-const MPH_TO_KT = 0.868976;
+// --- NWS gridpoint time series ---------------------------------------------
+// Each gridpoint variable is a list of {validTime: "<ISO>/<ISO8601 duration>",
+// value} where the value holds for that duration. We expand those into intervals
+// and sample by timestamp.
+
+interface Interval {
+  start: number;
+  end: number;
+  value: number | null;
+}
+
+/** Hours in an ISO8601 duration like P1DT6H / PT3H / PT30M (the NWS subset). */
+export function parseDurationHours(dur: string): number {
+  const m = dur.match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?$/);
+  if (!m) return 1;
+  return +(m[1] || 0) * 24 + +(m[2] || 0) + +(m[3] || 0) / 60;
+}
+
+function parseSeries(v: { values?: { validTime: string; value: number | null }[] } | undefined): Interval[] {
+  const out: Interval[] = [];
+  for (const e of v?.values ?? []) {
+    const [iso, dur] = e.validTime.split("/");
+    const start = new Date(iso).getTime();
+    out.push({ start, end: start + parseDurationHours(dur || "PT1H") * 3600_000, value: e.value });
+  }
+  return out;
+}
+
+/** Value of the interval covering `t`, else the first/last value in range. */
+export function sampleAt(series: Interval[], t: number): number | null {
+  if (!series.length) return null;
+  for (const p of series) if (t >= p.start && t < p.end) return p.value;
+  return t < series[0].start ? series[0].value : series[series.length - 1].value;
+}
 
 async function fetchJson<T>(url: string, revalidate: number): Promise<T | null> {
   try {
@@ -43,38 +74,63 @@ async function fetchText(url: string, revalidate: number): Promise<string | null
   }
 }
 
-function parseSpeedKt(s: string | undefined): number {
-  if (!s) return 0;
-  const nums = (s.match(/\d+/g) || []).map(Number);
-  if (!nums.length) return 0;
-  return Math.max(...nums) * MPH_TO_KT; // higher end of any range, mph → kt
-}
+type SeriesKey = "waveHeight" | "wavePeriod" | "waveDirection" | "windSpeed" | "windGust" | "windDirection";
+type Gridpoint = Record<SeriesKey, Interval[]>;
+const SERIES_KEYS: SeriesKey[] = ["waveHeight", "wavePeriod", "waveDirection", "windSpeed", "windGust", "windDirection"];
 
-/** Hourly wind forecast → ForecastHour[] with an estimated wind-sea. */
-export async function getHourlyForecast(lat: number, lon: number): Promise<ForecastHour[]> {
-  const point = await fetchJson<{ properties: { forecastHourly: string } }>(
-    `https://api.weather.gov/points/${lat.toFixed(4)},${lon.toFixed(4)}`,
-    24 * 3600,
+async function fetchGridpoint(grid: string): Promise<Gridpoint | null> {
+  const gp = await fetchJson<{ properties: Record<string, { values?: { validTime: string; value: number | null }[] }> }>(
+    `https://api.weather.gov/gridpoints/${grid}`,
+    1800,
   );
-  const url = point?.properties?.forecastHourly;
-  if (!url) return [];
-  const fc = await fetchJson<{ properties: { periods: RawPeriod[] } }>(url, 1800);
-  const periods = fc?.properties?.periods;
-  if (!periods) return [];
-
-  return periods.slice(0, 48).map((p) => {
-    const windKt = parseSpeedKt(p.windSpeed);
-    const windDir = CARDINAL[(p.windDirection || "N").toUpperCase()] ?? 0;
-    const gustKt = p.windGust ? parseSpeedKt(p.windGust) : windKt * 1.35;
-    return { time: p.startTime, windDir, windKt, gustKt, waveFt: estimateWaveFt(windKt, windDir) };
-  });
+  if (!gp?.properties) return null;
+  const out = {} as Gridpoint;
+  for (const k of SERIES_KEYS) out[k] = parseSeries(gp.properties[k]);
+  return out;
 }
 
-interface RawPeriod {
-  startTime: string;
-  windSpeed?: string;
-  windGust?: string;
-  windDirection?: string;
+export interface GridWave {
+  waveFt: number | null;
+  wavePeriodS: number | null;
+  waveDir: number | null;
+}
+
+/** Current per-harbor wave from the NWS gridpoint (model nowcast). */
+export async function getGridWaveCurrent(grid: string): Promise<GridWave | null> {
+  const gp = await fetchGridpoint(grid);
+  if (!gp) return null;
+  const now = Date.now();
+  const m = sampleAt(gp.waveHeight, now);
+  return {
+    waveFt: m == null ? null : m * M_TO_FT,
+    wavePeriodS: sampleAt(gp.wavePeriod, now),
+    waveDir: sampleAt(gp.waveDirection, now),
+  };
+}
+
+/** Per-harbor hourly wind + wave forecast from the gridpoint (next 48 h). */
+export async function getGridpointHourly(grid: string): Promise<ForecastHour[]> {
+  const gp = await fetchGridpoint(grid);
+  if (!gp) return [];
+  const start = Math.floor(Date.now() / 3600_000) * 3600_000;
+  const out: ForecastHour[] = [];
+  for (let i = 0; i < 48; i++) {
+    const t = start + i * 3600_000;
+    const ws = sampleAt(gp.windSpeed, t);
+    const wd = sampleAt(gp.windDirection, t);
+    if (ws == null || wd == null) continue;
+    const windKt = ws * KMH_TO_KT;
+    const gustKmh = sampleAt(gp.windGust, t);
+    const wh = sampleAt(gp.waveHeight, t);
+    out.push({
+      time: new Date(t).toISOString(),
+      windDir: wd,
+      windKt,
+      gustKt: (gustKmh ?? ws) * KMH_TO_KT,
+      waveFt: wh == null ? estimateWaveFt(windKt, wd) : wh * M_TO_FT,
+    });
+  }
+  return out;
 }
 
 export interface MarineForecast {

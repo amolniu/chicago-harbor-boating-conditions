@@ -6,7 +6,7 @@
 // baseline) and in the browser (so boat/skill toggles recompute instantly), and
 // so it can be unit-tested. See lib/rating.test.ts.
 
-import { Advisory, Conditions, Rating, Status } from "./types";
+import { Advisory, Conditions, Rating, Status, StormRisk } from "./types";
 import { Harbor, exposureForWind, crosswindKt } from "./harbors";
 import { BoatProfile, Skill, skillFactor } from "./boats";
 import { degToCompass } from "./units";
@@ -25,18 +25,24 @@ function statusFromScore(score: number): Status {
   return "red";
 }
 
-// A marine advisory means the open lake is hazardous for small craft, so it caps
-// the comfort score directly (rather than overriding the status after the fact —
-// that made score and status disagree). Beginners are held to a tighter cap than
-// advanced sailors. Returns the highest score the advisory allows (100 = no cap).
-function advisoryCap(advisory: Advisory, skill: Skill): number {
+// A marine advisory caps the comfort score directly (rather than overriding the
+// status after the fact — that made score and status disagree). Beginners get a
+// tighter cap than advanced sailors. A Small Craft Advisory is zone-wide, but a
+// sheltered harbor is genuinely safer to get out of and day-sail near than an
+// exposed one under the same advisory, so the SCA cap is eased by `shelter`
+// (= 1 - exposureScale, 0 = fully exposed … ~0.7 = tucked away). This also stops
+// the SCA from flat-lining every harbor to the same score. Gale/storm stay flat —
+// dangerous everywhere. Returns the highest score the advisory allows (100 = none).
+function advisoryCap(advisory: Advisory, skill: Skill, shelter: number): number {
   switch (advisory) {
     case "storm":
       return 5;
     case "gale":
       return 10;
-    case "small_craft":
-      return skill === "beginner" ? 24 : skill === "advanced" ? 58 : 48;
+    case "small_craft": {
+      const base = skill === "beginner" ? 24 : skill === "advanced" ? 58 : 48;
+      return base + 20 * Math.max(0, Math.min(1, shelter));
+    }
     default:
       return 100;
   }
@@ -44,6 +50,13 @@ function advisoryCap(advisory: Advisory, skill: Skill): number {
 
 function advisoryLabel(advisory: Advisory): string {
   return advisory === "gale" ? "gale warning" : advisory === "storm" ? "storm warning" : "small-craft advisory";
+}
+
+// HRRR convective outlook caps the score: an active thunderstorm is a hard no-go;
+// "elevated" (storms likely soon) is yellow at best. "watch"/"none" don't cap —
+// they're surfaced in the intel panel and banner instead.
+function stormCap(level: StormRisk["level"] | undefined): number {
+  return level === "active" ? 8 : level === "elevated" ? 45 : 100;
 }
 
 interface Metric {
@@ -94,8 +107,11 @@ export function rate(
 
   // An advisory is an open-lake condition, so it enters as a metric on the open
   // side. overall = min(...) then flows to the score, so score and status agree.
-  const cap = advisoryCap(c.advisory, skill);
+  const cap = advisoryCap(c.advisory, skill, 1 - harbor.exposureScale);
   if (cap < 100) open.push({ key: "advisory", label: advisoryLabel(c.advisory), score: cap });
+
+  const sCap = stormCap(c.storm?.level);
+  if (sCap < 100) open.push({ key: "storm", label: "storm risk", score: sCap });
 
   const openScore = Math.min(...open.map((m) => m.score));
   const exitScore = Math.min(...exit.map((m) => m.score));
@@ -138,12 +154,16 @@ function buildReason(
 
   if (status === "green") {
     const wavePart = c.waveFt != null ? `, ${c.waveFt.toFixed(1)} ft on the lake` : "";
-    return `Clean ${dir} ${wind} breeze${wavePart} — good to go from ${harbor.name}.`;
+    const scNote =
+      c.advisory === "small_craft" ? " Small Craft Advisory is up on the open lake, but this harbor is protected." : "";
+    return `Clean ${dir} ${wind} breeze${wavePart} — good to go from ${harbor.name}.${scNote}`;
   }
 
   const scPrefix = c.advisory === "small_craft" && limiter.key !== "advisory" ? "Small Craft Advisory up. " : "";
 
   switch (limiter.key) {
+    case "storm":
+      return c.storm?.headline ?? "Thunderstorm risk in the area — stay in.";
     case "advisory":
       return `Small Craft Advisory in effect — the open lake is above ${SKILL_POSSESSIVE[skill]} comfort, even if it looks manageable at the dock.`;
     case "exitWave":

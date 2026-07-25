@@ -53,7 +53,9 @@ export function computeWindow(
   skill: Skill,
   sunrise: Date | null,
   sunset: Date | null,
+  stormHours: string[] = [],
 ): SailWindow {
+  const stormy = new Set(stormHours);
   const next = forecast.slice(0, 24);
   const scored: ScoredHour[] = next.map((h) => {
     const r = rate(
@@ -69,8 +71,12 @@ export function computeWindow(
     );
     const t = new Date(h.time);
     const daylight = sunrise && sunset ? isDaylight(t, sunrise, sunset) : true;
+    // A forecast hour with thunderstorms is red regardless of wind/wave.
+    const isStorm = stormy.has(h.time);
     return {
-      time: h.time, hour: localHour(h.time), status: r.status, score: r.score,
+      time: h.time, hour: localHour(h.time),
+      status: isStorm ? "red" : r.status,
+      score: isStorm ? 0 : r.score,
       windKt: h.windKt, windDir: h.windDir, waveFt: h.waveFt, daylight,
     };
   });

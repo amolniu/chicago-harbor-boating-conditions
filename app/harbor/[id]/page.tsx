@@ -30,6 +30,7 @@ interface Bundle {
   marine: { advisory: Conditions["advisory"]; waveText: string | null; headline: string | null };
   discussion: { text: string; issued: string | null } | null;
   sun: { sunrise: string; sunset: string };
+  stormHours: string[];
   radarStation: string;
 }
 
@@ -69,7 +70,9 @@ export default function HarborDetail() {
   const rating = useMemo(() => (b && harbor ? rate(harbor, b.conditions, boat, skill) : null), [b, harbor, boat, skill]);
   const sail = useMemo(
     () =>
-      b && harbor ? computeWindow(harbor, b.forecast, boat, skill, new Date(b.sun.sunrise), new Date(b.sun.sunset)) : null,
+      b && harbor
+        ? computeWindow(harbor, b.forecast, boat, skill, new Date(b.sun.sunrise), new Date(b.sun.sunset), b.stormHours)
+        : null,
     [b, harbor, boat, skill],
   );
   const intel = useMemo(() => (b && harbor ? harborIntel(harbor, b.conditions, boat, skill) : null), [b, harbor, boat, skill]);
@@ -105,11 +108,24 @@ export default function HarborDetail() {
           </div>
         </div>
         <p className="mt-3 text-slate-200">{rating.reason}</p>
-        {c.advisory !== "none" && (
-          <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-200">
-            ⚠ {ADVISORY_LABEL[c.advisory]} in effect{b.marine.headline ? ` — ${b.marine.headline}` : ""}
-          </div>
-        )}
+        <div className="mt-3 flex flex-col items-start gap-2">
+          {c.advisory !== "none" && (
+            <div className="inline-flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-200">
+              ⚠ {ADVISORY_LABEL[c.advisory]} in effect{b.marine.headline ? ` — ${b.marine.headline}` : ""}
+            </div>
+          )}
+          {c.storm && c.storm.level !== "none" && (
+            <div
+              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${
+                c.storm.level === "watch"
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
+                  : "border-rose-500/40 bg-rose-500/10 text-rose-200"
+              }`}
+            >
+              ⛈ {c.storm.headline}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">

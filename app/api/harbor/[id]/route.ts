@@ -4,9 +4,9 @@
 // window from this against the user's boat + skill.
 
 import { getHarbor } from "@/lib/harbors";
-import { getHarborConditions } from "@/lib/conditions";
+import { getHarborConditions, getStormHours } from "@/lib/conditions";
 import { getBuoyWindHistory } from "@/lib/ndbc";
-import { getHourlyForecast, getMarineForecast, getDiscussion } from "@/lib/nws";
+import { getGridpointHourly, getMarineForecast, getDiscussion } from "@/lib/nws";
 import { getSunTimes } from "@/lib/astro";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +16,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const harbor = getHarbor(id);
   if (!harbor) return new Response("Harbor not found", { status: 404 });
 
-  const [conditions, forecast, marine, discussion] = await Promise.all([
+  const [conditions, forecast, marine, discussion, stormHours] = await Promise.all([
     getHarborConditions(harbor),
-    getHourlyForecast(harbor.lat, harbor.lon),
+    getGridpointHourly(harbor.waveGrid),
     getMarineForecast(harbor.marineZone),
     getDiscussion("LOT"),
+    getStormHours(),
   ]);
 
   // Prefer the harbor's own station for wind history; fall back to 45198.
@@ -41,6 +42,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     marine: { advisory: marine.advisory, waveText: marine.waveText, headline: marine.headline },
     discussion: discussion ? { text: discussion.text, issued: discussion.issued } : null,
     sun: { sunrise: sunrise.toISOString(), sunset: sunset.toISOString() },
+    stormHours,
     radarStation: "LOT",
   });
 }

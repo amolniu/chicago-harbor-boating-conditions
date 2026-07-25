@@ -150,5 +150,13 @@ export function harborIntel(harbor: Harbor, c: Conditions, boat: BoatProfile, sk
     items.push({ label: "Cold water & safety", impact, severity });
   }
 
+  // Storm & squalls — HRRR convective outlook (regional).
+  if (c.storm) {
+    const level = c.storm.level;
+    const severity: IntelSeverity = level === "active" || level === "elevated" ? "alert" : level === "watch" ? "watch" : "ok";
+    const capePart = c.storm.capeNow != null && c.storm.capeNow >= 300 ? ` CAPE ~${Math.round(c.storm.capeNow)} J/kg.` : "";
+    items.push({ label: "Storm & squalls", impact: c.storm.headline + capePart, severity });
+  }
+
   return items;
 }

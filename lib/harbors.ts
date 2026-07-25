@@ -29,6 +29,9 @@ export interface Harbor {
   buoyStation: string;
   /** NWS nearshore marine zone for forecasts + advisories. */
   marineZone: string;
+  /** NWS gridpoint (e.g. "LOT/76,76") for the harbor's offshore point — carries
+   *  per-harbor wave height/period/direction + marine wind. */
+  waveGrid: string;
   notes: {
     entrance: string;
     docking: string;
@@ -85,6 +88,7 @@ export function crosswindKt(harbor: Harbor, windDir: number, windKt: number): nu
 export const HARBORS: Harbor[] = [
   {
     id: "montrose",
+    waveGrid: "LOT/76,77",
     name: "Montrose Harbor",
     lat: 41.9636, lon: -87.6375,
     entranceBearing: 150,
@@ -100,6 +104,7 @@ export const HARBORS: Harbor[] = [
   },
   {
     id: "belmont",
+    waveGrid: "LOT/76,76",
     name: "Belmont Harbor",
     lat: 41.9401, lon: -87.6360,
     entranceBearing: 60,
@@ -115,6 +120,7 @@ export const HARBORS: Harbor[] = [
   },
   {
     id: "diversey",
+    waveGrid: "LOT/76,76",
     name: "Diversey Harbor",
     lat: 41.9322, lon: -87.6366,
     entranceBearing: 90,
@@ -130,6 +136,7 @@ export const HARBORS: Harbor[] = [
   },
   {
     id: "dusable",
+    waveGrid: "LOT/77,74",
     name: "DuSable Harbor",
     lat: 41.8869, lon: -87.6127,
     entranceBearing: 90,
@@ -145,6 +152,7 @@ export const HARBORS: Harbor[] = [
   },
   {
     id: "monroe",
+    waveGrid: "LOT/77,73",
     name: "Monroe Harbor",
     lat: 41.8802, lon: -87.6103,
     entranceBearing: 60,
@@ -160,6 +168,7 @@ export const HARBORS: Harbor[] = [
   },
   {
     id: "burnham",
+    waveGrid: "LOT/77,72",
     name: "Burnham Harbor",
     lat: 41.8607, lon: -87.6094,
     entranceBearing: 180,
@@ -175,6 +184,7 @@ export const HARBORS: Harbor[] = [
   },
   {
     id: "31st",
+    waveGrid: "LOT/77,71",
     name: "31st Street Harbor",
     lat: 41.8385, lon: -87.6050,
     entranceBearing: 100,
@@ -190,6 +200,7 @@ export const HARBORS: Harbor[] = [
   },
   {
     id: "59th",
+    waveGrid: "LOT/78,69",
     name: "59th Street Harbor",
     lat: 41.7876, lon: -87.5757,
     entranceBearing: 90,
@@ -204,6 +215,7 @@ export const HARBORS: Harbor[] = [
   },
   {
     id: "jackson-inner",
+    waveGrid: "LOT/79,69",
     name: "Jackson Park Inner Harbor",
     lat: 41.7822, lon: -87.5720,
     entranceBearing: 70,
@@ -219,6 +231,7 @@ export const HARBORS: Harbor[] = [
   },
   {
     id: "jackson-outer",
+    waveGrid: "LOT/79,69",
     name: "Jackson Park Outer Harbor",
     lat: 41.7808, lon: -87.5688,
     entranceBearing: 80,

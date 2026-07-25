@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { rate } from "./rating";
-import { getHarbor } from "./harbors";
+import { getHarbor, HARBORS } from "./harbors";
 import { getBoat } from "./boats";
 import { Conditions } from "./types";
 
@@ -79,6 +79,23 @@ describe("advisory caps", () => {
   it("a gale warning is red for everyone", () => {
     const gale = cond({ windKt: 8, waveFt: 1, advisory: "gale" });
     expect(rate(monroe, gale, getBoat("beneteau40"), "advanced").status).toBe("red");
+  });
+});
+
+describe("exposure-aware advisory cap (breaks the SCA flat-line)", () => {
+  // Calm water but a zone-wide Small Craft Advisory — the case that used to make
+  // every harbor read the same score.
+  const calmSCA = cond({ windDir: 45, windKt: 9, gustKt: 11, waveFt: 1.2, advisory: "small_craft" });
+
+  it("a sheltered harbor scores higher than an exposed one under the same SCA", () => {
+    const sheltered = rate(getHarbor("diversey")!, calmSCA, catalina, "intermediate");
+    const exposed = rate(getHarbor("jackson-outer")!, calmSCA, catalina, "intermediate");
+    expect(sheltered.score).toBeGreaterThan(exposed.score);
+  });
+
+  it("spreads scores across the harbors instead of flat-lining them", () => {
+    const scores = HARBORS.map((h) => rate(h, calmSCA, catalina, "intermediate").score);
+    expect(new Set(scores).size).toBeGreaterThanOrEqual(5);
   });
 });
 
