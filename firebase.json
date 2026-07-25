@@ -8,10 +8,7 @@
       "maxInstances": 2
     }
   },
-  "firestore": [
-    {
-      "database": "sailing",
-      "rules": "firestore.rules"
-    }
-  ]
+  "firestore": {
+    "rules": "firestore.rules"
+  }
 }

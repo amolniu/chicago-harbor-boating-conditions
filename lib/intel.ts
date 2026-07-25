@@ -76,7 +76,7 @@ export function harborIntel(harbor: Harbor, c: Conditions, boat: BoatProfile, sk
       } else if (severity === "watch") {
         impact = `${Math.round(cross)} kt of crosswind at the entrance — noticeable; carry a little extra speed and commit to the approach.`;
       } else {
-        impact = `Only ${Math.round(cross)} kt across the entrance — docking should be straightforward.`;
+        impact = `Only ${Math.round(cross)} kt of crosswind across the entrance — docking should be straightforward.`;
       }
     }
     items.push({ label: "Docking", note: harbor.notes.docking, impact, severity });

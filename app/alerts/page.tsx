@@ -46,7 +46,7 @@ export default function AlertsPage() {
   }
 
   if (loading || !user || !prefs) {
-    return <div className="grid min-h-[40vh] place-items-center text-slate-400">Loading your alerts…</div>;
+    return <div className="grid min-h-[40vh] place-items-center text-slate-400">Loading your alert…</div>;
   }
 
   const toggleHarbor = (id: string) =>
@@ -64,14 +64,14 @@ export default function AlertsPage() {
     <div className="mx-auto max-w-2xl">
       <div className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Your alerts</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Your alert</h1>
           <p className="text-sm text-slate-400">Signed in as {prefs.email}</p>
         </div>
         <Link href="/" className="text-sm text-slate-400 hover:text-slate-200">← Board</Link>
       </div>
 
       {/* Watched harbors */}
-      <Section title="Harbors to watch" hint="You'll get alerts for these when your rules below are met.">
+      <Section title="Harbors to watch" hint="Your alert covers these harbors — it fires when your rules below are met.">
         <div className="flex flex-wrap gap-2">
           {HARBORS.map((h) => {
             const on = prefs.watchedHarbors.includes(h.id);
@@ -185,7 +185,7 @@ export default function AlertsPage() {
           onClick={save} disabled={saving}
           className="rounded-lg bg-sky-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-400 disabled:opacity-50"
         >
-          {saving ? "Saving…" : "Save alerts"}
+          {saving ? "Saving…" : "Save alert"}
         </button>
         {saved && <span className="text-sm text-emerald-300">Saved ✓</span>}
       </div>
