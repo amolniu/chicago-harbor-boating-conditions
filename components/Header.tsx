@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePrefs } from "./prefs";
+import { useAuth } from "./auth";
 import { BOATS, SKILLS, Skill } from "@/lib/boats";
 
 export function Header() {
@@ -51,7 +52,42 @@ export function Header() {
             ))}
           </div>
         </div>
+
+        <AuthControl />
       </div>
     </header>
+  );
+}
+
+function AuthControl() {
+  const { user, loading, signOut } = useAuth();
+  if (loading) return null;
+  if (!user) {
+    return (
+      <Link
+        href="/account"
+        className="whitespace-nowrap rounded-md border border-white/10 bg-slate-900 px-3 py-1.5 text-sm text-slate-300 hover:text-white sm:ml-2"
+      >
+        Sign in
+      </Link>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2 text-sm sm:ml-2">
+      <Link
+        href="/alerts"
+        title="Your alerts"
+        className="whitespace-nowrap rounded-md border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-sky-200 hover:bg-sky-500/20"
+      >
+        🔔 Alerts
+      </Link>
+      <button
+        onClick={() => void signOut()}
+        title={user.email ?? "Sign out"}
+        className="whitespace-nowrap text-slate-400 hover:text-slate-200"
+      >
+        Sign out
+      </button>
+    </div>
   );
 }

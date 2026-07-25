@@ -7,5 +7,11 @@
       "region": "us-central1",
       "maxInstances": 2
     }
-  }
+  },
+  "firestore": [
+    {
+      "database": "sailing",
+      "rules": "firestore.rules"
+    }
+  ]
 }
