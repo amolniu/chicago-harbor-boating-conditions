@@ -27,6 +27,11 @@ export interface Harbor {
   exposedDirs?: Compass16[];
   /** Nearest NDBC station for localized data (wind/temp). */
   buoyStation: string;
+  /** Optional dedicated wave buoy sitting right off the harbor. When set, its
+   *  OBSERVED wave height is blended with the gridpoint model (observation-weighted)
+   *  for current conditions — use when a wave-only buoy (e.g. 45186/45187) is closer
+   *  than buoyStation. The NWS gridpoint still drives the wave forecast series. */
+  waveBuoy?: string;
   /** NWS nearshore marine zone for forecasts + advisories. */
   marineZone: string;
   /** NWS gridpoint (e.g. "LOT/76,76") for the harbor's offshore point — carries
@@ -267,6 +272,91 @@ export const HARBORS: Harbor[] = [
       entrance: "The most exposed of the Jackson Park basins — open to the east and northeast.",
       docking: "Mooring and transient space; expect motion on a lake swell.",
       hazards: "Wave surge works right into the outer basin on an onshore blow.",
+    },
+  },
+
+  // ── Illinois / Wisconsin (north, same west shore as Chicago) ─────────────────
+  // Same western shore, so the base Chicago fetch shape applies (a WEST wind is
+  // offshore/calm; NE–E is the onshore wave-maker) — openWaterBearing stays unset.
+  // The two southern harbors remain LOT/KLOT (defaults); Kenosha and Winthrop Harbor
+  // cross into Wisconsin waters → MKX office + KMKX radar. Wind comes from CHII2
+  // (south) or the nearest wind buoy 45199 (north), while the wave-only buoys that
+  // sit right offshore (45186/45187) supply OBSERVED waves via waveBuoy. No
+  // representative lakefront cam up here, so all hide the panel.
+  {
+    id: "southport",
+    waveGrid: "MKX/94,44",
+    name: "Southport Marina (Kenosha)",
+    lat: 42.5814, lon: -87.8101,
+    entranceBearing: 90,
+    exposureScale: 0.5,
+    exposedDirs: ["NE", "ENE", "E"],
+    buoyStation: "45199",
+    waveBuoy: "45187",
+    marineZone: "LMZ646",
+    discussionOffice: "MKX",
+    radarStation: "KMKX",
+    webcamUrl: "",
+    notes: {
+      entrance: "Behind Kenosha's long breakwater; the harbor mouth opens east, so a NE sea stacks up at the gap.",
+      docking: "Protected basin in Kenosha's south harbor — calm and roomy once you're inside the breakwall.",
+      hazards: "The outer breakwater gap takes the brunt of an easterly; mind traffic and the pierheads on entry.",
+    },
+  },
+  {
+    id: "north-point",
+    waveGrid: "MKX/95,40",
+    name: "North Point Marina (Winthrop Harbor)",
+    lat: 42.4872, lon: -87.7977,
+    entranceBearing: 110,
+    exposureScale: 0.5,
+    exposedDirs: ["E", "ESE", "NE"],
+    buoyStation: "45199",
+    waveBuoy: "45187",
+    marineZone: "LMZ646",
+    discussionOffice: "MKX",
+    radarStation: "KMKX",
+    webcamUrl: "",
+    notes: {
+      entrance: "One of the largest marinas on the lake, tucked behind twin breakwaters right at the Illinois–Wisconsin line; the SE-facing entrance is open to an onshore swell.",
+      docking: "Huge, well-marked modern basin — forgiving in most conditions once you're through the gap.",
+      hazards: "The entrance channel shoals on its edges, and an easterly sea builds right at the breakwater mouth.",
+    },
+  },
+  {
+    id: "waukegan",
+    waveGrid: "LOT/69,95",
+    name: "Waukegan Harbor & Marina",
+    lat: 42.3557, lon: -87.8210,
+    entranceBearing: 120,
+    exposureScale: 0.55,
+    exposedDirs: ["NE", "E", "ESE"],
+    buoyStation: "CHII2",
+    waveBuoy: "45186",
+    marineZone: "LMZ740",
+    webcamUrl: "",
+    notes: {
+      entrance: "A deepwater harbor behind a substantial outer breakwater; the marina basin sits well inside, but the approach to the SE-facing gap is open to a NE blow.",
+      docking: "Sheltered slips in the inner basin — quiet once past the commercial frontage.",
+      hazards: "Commercial and charter traffic share the entrance, and a NE sea reflects off the outer wall near the mouth.",
+    },
+  },
+  {
+    id: "great-lakes-marina",
+    waveGrid: "LOT/69,92",
+    name: "Great Lakes Marina (North Chicago)",
+    lat: 42.3053, lon: -87.8249,
+    entranceBearing: 100,
+    exposureScale: 0.6,
+    exposedDirs: ["NE", "ENE", "E"],
+    buoyStation: "CHII2",
+    waveBuoy: "45186",
+    marineZone: "LMZ740",
+    webcamUrl: "",
+    notes: {
+      entrance: "A compact basin on the open North Chicago shore; the east-facing entrance takes onshore seas fairly directly.",
+      docking: "Small, tucked marina — easy slips inside, but little room to recover from a blown approach in a breeze.",
+      hazards: "Exposed shoreline with only modest breakwater cover; an onshore NE wind makes the gap the hard part of the day.",
     },
   },
 

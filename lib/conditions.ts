@@ -1,6 +1,7 @@
 // Orchestration: assemble canonical Conditions for every harbor from the raw
-// sources (nearest buoy for localized wind/temp, buoy 45198 as the primary wave
-// source, marine zone for advisories), and optionally persist a snapshot.
+// sources (nearest buoy for localized wind/temp, an optional dedicated wave buoy
+// blended with the per-harbor NWS gridpoint for waves, marine zone for advisories),
+// and optionally persist a snapshot.
 //
 // Server-only.
 
@@ -15,6 +16,10 @@ import { getDb } from "@/db";
 import { harborSnapshots, observations, type ObservationRow } from "@/db/schema";
 
 const PRIMARY_WAVE_STATION = "45198"; // Chicago Buoy — full wave spectra
+// Weight on an observed local wave buoy vs the NWS gridpoint model when both exist
+// (0.7 = 70% observed / 30% model): real observations lead, but the model still
+// nudges the score so one noisy reading — or a buoy dropout — can't swing it alone.
+const WAVE_OBS_WEIGHT = 0.7;
 const CHICAGO = { lat: 41.8899, lon: -87.61 }; // metro point for the (regional) storm outlook
 
 // Ordered wind fallbacks used when a harbor's own station has no wind (e.g. buoy
@@ -53,19 +58,40 @@ function assemble(
   storm: StormRisk | undefined,
 ): Conditions {
   const windChain = uniq([harbor.buoyStation, ...WIND_FALLBACK]);
-  const dataChain = uniq([harbor.buoyStation, PRIMARY_WAVE_STATION, ...WIND_FALLBACK]);
+  // A dedicated local wave buoy (if set) leads the data chain: it sits right off
+  // the harbor, so its observed waves/water-temp beat the model and distant buoys.
+  const dataChain = uniq(
+    [harbor.waveBuoy, harbor.buoyStation, PRIMARY_WAVE_STATION, ...WIND_FALLBACK].filter(
+      (s): s is string => !!s,
+    ),
+  );
 
   // Wind dir/speed/gust come from the first station that reports wind.
   const wind = pickField(buoys, windChain, "windKt");
   const wb = wind.station ? buoys.get(wind.station) : null;
 
-  // Waves are per-harbor from the NWS gridpoint model; the buoy is the fallback
-  // when the grid has no value. Keep height/period/direction from one source.
+  // Waves: blend an observed local wave buoy (ground truth, weighted majority) with
+  // the per-harbor NWS gridpoint model — real observations lead, the model still
+  // contributes. Fall back to whichever exists, then to any buoy in the chain.
+  // Period/direction can't be blended, so take them from the observed buoy first.
+  const localWave = harbor.waveBuoy ? buoys.get(harbor.waveBuoy) : null;
+  const obsWave = localWave?.waveFt ?? null;
+  const modelWave = gridWave?.waveFt ?? null;
   let waveFt: number | null;
   let wavePeriodS: number | null;
   let waveDir: number | null;
-  if (gridWave?.waveFt != null) {
-    ({ waveFt, wavePeriodS, waveDir } = gridWave);
+  if (obsWave != null && modelWave != null) {
+    waveFt = WAVE_OBS_WEIGHT * obsWave + (1 - WAVE_OBS_WEIGHT) * modelWave;
+    wavePeriodS = localWave?.wavePeriodS ?? gridWave?.wavePeriodS ?? null;
+    waveDir = localWave?.waveDir ?? gridWave?.waveDir ?? null;
+  } else if (obsWave != null) {
+    waveFt = obsWave;
+    wavePeriodS = localWave?.wavePeriodS ?? null;
+    waveDir = localWave?.waveDir ?? null;
+  } else if (modelWave != null) {
+    waveFt = modelWave;
+    wavePeriodS = gridWave?.wavePeriodS ?? null;
+    waveDir = gridWave?.waveDir ?? null;
   } else {
     const wave = pickField(buoys, dataChain, "waveFt");
     const wvb = wave.station ? buoys.get(wave.station) : null;
@@ -102,7 +128,12 @@ export async function getStormHours(): Promise<string[]> {
 
 /** Live conditions for every harbor. Fetches each unique station/zone once. */
 export async function getAllConditions(): Promise<HarborConditions[]> {
-  const stations = uniq([...HARBORS.map((h) => h.buoyStation), PRIMARY_WAVE_STATION, ...WIND_FALLBACK]);
+  const stations = uniq([
+    ...HARBORS.map((h) => h.buoyStation),
+    ...HARBORS.map((h) => h.waveBuoy).filter((s): s is string => !!s),
+    PRIMARY_WAVE_STATION,
+    ...WIND_FALLBACK,
+  ]);
   const zones = uniq(HARBORS.map((h) => h.marineZone));
   const grids = uniq(HARBORS.map((h) => h.waveGrid));
 
@@ -126,7 +157,11 @@ export async function getAllConditions(): Promise<HarborConditions[]> {
 
 /** Conditions for a single harbor (detail page). */
 export async function getHarborConditions(harbor: Harbor): Promise<Conditions> {
-  const stations = uniq([harbor.buoyStation, PRIMARY_WAVE_STATION, ...WIND_FALLBACK]);
+  const stations = uniq(
+    [harbor.buoyStation, harbor.waveBuoy, PRIMARY_WAVE_STATION, ...WIND_FALLBACK].filter(
+      (s): s is string => !!s,
+    ),
+  );
   const [buoyEntries, gridWave, marine, stormOutlook] = await Promise.all([
     Promise.all(stations.map(async (s) => [s, await getBuoyCurrent(s)] as const)),
     getGridWaveCurrent(harbor.waveGrid),
