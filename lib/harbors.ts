@@ -25,8 +25,13 @@ export interface Harbor {
   shelteredDirs?: Compass16[];
   /** Directions that funnel unusually badly onto the entrance (×1.4). */
   exposedDirs?: Compass16[];
-  /** Nearest NDBC station for localized data (wind/temp). */
-  buoyStation: string;
+  /** Nearest NDBC station for localized wind/temp. Optional: buoy-less harbors
+   *  (windFromGrid) omit it and take live wind from their gridpoint model instead. */
+  buoyStation?: string;
+  /** Take live wind (dir/speed/gust) from this harbor's own NWS gridpoint model
+   *  rather than a buoy — for regions with no usable wind buoy (e.g. Green Bay).
+   *  Waves still come from the gridpoint; water temp is left blank (no local obs). */
+  windFromGrid?: boolean;
   /** Optional dedicated wave buoy sitting right off the harbor. When set, its
    *  OBSERVED wave height is blended with the gridpoint model for current conditions,
    *  weighted by `km` (the buoy's distance from the harbor — closer ⇒ more weight, see
@@ -492,6 +497,112 @@ export const HARBORS: Harbor[] = [
       entrance: "Tucked at the east end of White Lake; there's a long inland run and the Montague–Whitehall channel before Lake Michigan, so the marina stays calm when the lake is up.",
       docking: "Quiet municipal slips deep inside White Lake — among the most protected water on this shore.",
       hazards: "Shoaling and current in the narrow White Lake channel to the lake; a hard westerly still raises a chop across the inland lake.",
+    },
+  },
+
+  // ── Green Bay / Bays de Noc (Michigan UP, west side) ─────────────────────────
+  // These sit on Green Bay, not open Lake Michigan. Green Bay has no usable wind
+  // buoy, so each takes live wind from its NWS gridpoint model (windFromGrid) and
+  // its waves from the gridpoint too; water temp is left blank (no local buoy).
+  // Menominee/Cedar River are true west-shore (open water eastward, like the IL/WI
+  // harbors — openWaterBearing unset). The Bays de Noc harbors are more enclosed and
+  // face other ways, so they set openWaterBearing explicitly (all seed values).
+  {
+    id: "menominee",
+    waveGrid: "GRB/93,61",
+    name: "Menominee Marina",
+    lat: 45.1072, lon: -87.6029,
+    entranceBearing: 90,
+    exposureScale: 0.45,
+    exposedDirs: ["NE", "ENE", "E"],
+    windFromGrid: true,
+    marineZone: "LMZ521",
+    discussionOffice: "GRB",
+    radarStation: "KGRB",
+    webcamUrl: "",
+    notes: {
+      entrance: "At the Menominee River mouth on the west shore of Green Bay; the breakwater-protected marina opens east into the bay.",
+      docking: "Sheltered municipal slips inside the river mouth; easy once past the pierheads.",
+      hazards: "A northeast wind builds a chop down the long axis of the bay onto the entrance; watch the river current at the mouth.",
+    },
+  },
+  {
+    id: "cedar-river",
+    waveGrid: "MQT/160,17",
+    name: "Cedar River State Harbor",
+    lat: 45.4123, lon: -87.3487,
+    entranceBearing: 90,
+    exposureScale: 0.45,
+    exposedDirs: ["NE", "E", "ESE"],
+    windFromGrid: true,
+    marineZone: "LMZ221",
+    discussionOffice: "MQT",
+    radarStation: "KGRB",
+    webcamUrl: "",
+    notes: {
+      entrance: "A small state harbor on the west shore of Green Bay; the east-facing entrance is open to wind across the bay.",
+      docking: "Compact protected basin behind the breakwall — quiet once inside.",
+      hazards: "Little room in the basin, and an easterly sea sets right onto the entrance; give the breakwater ends room.",
+    },
+  },
+  {
+    id: "escanaba",
+    waveGrid: "MQT/168,32",
+    name: "Escanaba Municipal Marina",
+    lat: 45.7428, lon: -87.0448,
+    entranceBearing: 120,
+    exposureScale: 0.3,
+    openWaterBearing: 160,
+    exposedDirs: ["S", "SSE", "SE"],
+    windFromGrid: true,
+    marineZone: "LMZ221",
+    discussionOffice: "MQT",
+    radarStation: "KMQT",
+    webcamUrl: "",
+    notes: {
+      entrance: "Near the head of Little Bay de Noc; the marina is well up the sheltered bay, so mainly a south fetch down the bay reaches it.",
+      docking: "Roomy, well-protected municipal basin — calm in most conditions.",
+      hazards: "A strong south wind funnels a chop up Little Bay de Noc onto the entrance; otherwise the bay stays workable.",
+    },
+  },
+  {
+    id: "fayette",
+    waveGrid: "MQT/178,33",
+    name: "Fayette State Harbor",
+    lat: 45.7192, lon: -86.6696,
+    entranceBearing: 270,
+    exposureScale: 0.15,
+    openWaterBearing: 250,
+    exposedDirs: ["W", "WSW", "SW"],
+    windFromGrid: true,
+    marineZone: "LMZ221",
+    discussionOffice: "MQT",
+    radarStation: "KMQT",
+    webcamUrl: "",
+    notes: {
+      entrance: "Snail Shell Harbor — a small, nearly landlocked limestone cove on the Garden Peninsula, opening west into Big Bay de Noc. Among the most protected water on the lake.",
+      docking: "Tiny, calm state-park basin below the historic townsite; tuck in and you're out of almost any weather.",
+      hazards: "Only a hard west/southwest wind reaches through the narrow mouth; watch depth and the rocky shoreline on the approach.",
+    },
+  },
+  {
+    id: "gladstone",
+    waveGrid: "MQT/167,35",
+    name: "Gladstone Marina",
+    lat: 45.8396, lon: -87.0196,
+    entranceBearing: 160,
+    exposureScale: 0.25,
+    openWaterBearing: 180,
+    exposedDirs: ["S", "SSW", "SSE"],
+    windFromGrid: true,
+    marineZone: "LMZ221",
+    discussionOffice: "MQT",
+    radarStation: "KMQT",
+    webcamUrl: "",
+    notes: {
+      entrance: "At the very head of Little Bay de Noc; a long protected run up the bay shelters the marina from open water.",
+      docking: "Quiet municipal basin tucked at the north end of the bay — among the calmest slips in the region.",
+      hazards: "Only a sustained south wind blowing up the length of the bay raises much chop here; mind shoaling near the head.",
     },
   },
 ];

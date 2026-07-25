@@ -89,22 +89,31 @@ async function fetchGridpoint(grid: string): Promise<Gridpoint | null> {
   return out;
 }
 
-export interface GridWave {
+export interface GridCurrent {
   waveFt: number | null;
   wavePeriodS: number | null;
   waveDir: number | null;
+  windKt: number | null;
+  gustKt: number | null;
+  windDir: number | null;
 }
 
-/** Current per-harbor wave from the NWS gridpoint (model nowcast). */
-export async function getGridWaveCurrent(grid: string): Promise<GridWave | null> {
+/** Current per-harbor wave + wind from the NWS gridpoint (model nowcast). The wind
+ *  is the live source for harbors with no nearby buoy (harbor.windFromGrid). */
+export async function getGridCurrent(grid: string): Promise<GridCurrent | null> {
   const gp = await fetchGridpoint(grid);
   if (!gp) return null;
   const now = Date.now();
   const m = sampleAt(gp.waveHeight, now);
+  const ws = sampleAt(gp.windSpeed, now);
+  const gustKmh = sampleAt(gp.windGust, now) ?? ws;
   return {
     waveFt: m == null ? null : m * M_TO_FT,
     wavePeriodS: sampleAt(gp.wavePeriod, now),
     waveDir: sampleAt(gp.waveDirection, now),
+    windKt: ws == null ? null : ws * KMH_TO_KT,
+    gustKt: gustKmh == null ? null : gustKmh * KMH_TO_KT,
+    windDir: sampleAt(gp.windDirection, now),
   };
 }
 

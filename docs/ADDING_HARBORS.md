@@ -12,7 +12,8 @@ Michigan harbors (St. Joseph, New Buffalo) are worked examples in `lib/harbors.t
 | Field | What it is | How to get it |
 |---|---|---|
 | `id`, `name`, `lat`, `lon` | identity + location | the marina's coordinates |
-| `buoyStation` | NDBC station for **live wind + temp** | nearest station with a `realtime2` feed (step 2) |
+| `buoyStation?` | NDBC station for **live wind + temp** | nearest station with a `realtime2` feed (step 2). Omit for buoy-less harbors (set `windFromGrid`) |
+| `windFromGrid?` | take live wind from the **gridpoint model** instead of a buoy | `true` when no usable wind buoy exists nearby (e.g. Green Bay). Waves still come from `waveGrid`; water temp is left blank |
 | `waveBuoy?` | `{ station, km }` — a wave buoy right off the harbor + its distance | optional — a buoy closer than `buoyStation` for waves; its **observed** wave is blended with the gridpoint model, weighted by `km` (closer ⇒ more weight). Often a wave-only buoy like `45186`/`45187` (step 2) |
 | `marineZone` | NWS nearshore zone (advisories, wave text) | from the point lookup (step 1) — e.g. `LMZ043` |
 | `waveGrid` | NWS gridpoint `OFFICE/x,y` for **per-harbor waves + marine wind** | from the point lookup (step 1) — e.g. `IWX/19,82` |
@@ -62,6 +63,12 @@ curl -s "https://www.ndbc.noaa.gov/data/realtime2/45170.txt" | sed -n '1p;3p'
 - `404` (e.g. some CO-OPS stations like `SJOM4`) → pick another (an offshore `45xxx`
   buoy, or the nearest GLERL met station like `MCYI3`).
 - No waves in the buoy (`WVHT = MM`) is fine — waves come from `waveGrid`.
+- **No usable buoy at all?** Some regions (e.g. Green Bay / the Bays de Noc) have only
+  GLOS stations that lack a `realtime2` feed (they 404), and the nearest real buoy is
+  far away in a different water body. In that case omit `buoyStation` and set
+  **`windFromGrid: true`** — live wind then comes from the harbor's own NWS gridpoint
+  model (the same source as the wind forecast). Waves still come from `waveGrid`; water
+  temp and the buoy wind-history graph are simply blank (no local observed source).
 - The reverse also happens: a **wave-only** buoy (`WDIR`/`WSPD` always `MM`, `WVHT`
   present — e.g. `45186` Waukegan, `45187` Winthrop Harbor) can't drive wind, but if it
   sits right off the harbor, set it as **`waveBuoy: { station, km }`** so its observed

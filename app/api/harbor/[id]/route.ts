@@ -24,7 +24,8 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     getStormHours(),
   ]);
 
-  const windHistory = await getBuoyWindHistory(harbor.buoyStation);
+  // Buoy-less harbors (windFromGrid) have no observed wind history to graph.
+  const windHistory = harbor.buoyStation ? await getBuoyWindHistory(harbor.buoyStation) : [];
   const { sunrise, sunset } = getSunTimes(harbor.lat, harbor.lon);
 
   return Response.json({
