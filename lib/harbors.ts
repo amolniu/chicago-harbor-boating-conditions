@@ -32,12 +32,27 @@ export interface Harbor {
   /** NWS gridpoint (e.g. "LOT/76,76") for the harbor's offshore point — carries
    *  per-harbor wave height/period/direction + marine wind. */
   waveGrid: string;
+  /** Compass bearing (deg true) toward open water / longest fetch. When set, the
+   *  base fetch shape is ROTATED to point here — needed for harbors that aren't on
+   *  Chicago's west shore (e.g. Michigan's east shore, where a WEST wind is the big
+   *  onshore wave-maker). Unset ⇒ use the shape as-is (west shore / Chicago). */
+  openWaterBearing?: number;
+  /** NWS office for the Area Forecast Discussion. Default "LOT" (Chicago). */
+  discussionOffice?: string;
+  /** NWS RIDGE radar station, e.g. "KLOT". Default "KLOT" (Chicago). */
+  radarStation?: string;
+  /** Lakefront webcam image URL. Default the GLERL Chicago cam; empty string hides the panel. */
+  webcamUrl?: string;
   notes: {
     entrance: string;
     docking: string;
     hazards: string;
   };
 }
+
+export const DEFAULT_DISCUSSION_OFFICE = "LOT";
+export const DEFAULT_RADAR_STATION = "KLOT";
+export const DEFAULT_WEBCAM_URL = "https://www.glerl.noaa.gov/metdata/chi/chi01.jpg";
 
 // Open-lake wave-generating fetch by the direction the wind blows FROM.
 // Chicago sits on the west shore, so westerly winds are offshore (little fetch),
@@ -61,13 +76,22 @@ export function lakeFetchFactor(windDir: number): number {
   return interpFetch(windDir);
 }
 
+// Bearing of the base fetch shape's peak (Chicago's open water is ~ENE). A harbor
+// with its own openWaterBearing rotates the shape so its peak points that way.
+const BASE_OPEN_WATER = 60;
+
+function harborFetch(harbor: Harbor, windDir: number): number {
+  const dir = harbor.openWaterBearing != null ? windDir - (harbor.openWaterBearing - BASE_OPEN_WATER) : windDir;
+  return interpFetch(dir);
+}
+
 /**
  * How much open-lake wave energy reaches this harbor's entrance for a given
- * wind direction. ~0 = sheltered, 1 = fully exposed. Combines lake fetch with
- * the harbor's breakwater geometry.
+ * wind direction. ~0 = sheltered, 1 = fully exposed. Combines lake fetch (oriented
+ * to the harbor's open water) with the harbor's breakwater geometry.
  */
 export function exposureForWind(harbor: Harbor, windDir: number): number {
-  let e = interpFetch(windDir) * harbor.exposureScale;
+  let e = harborFetch(harbor, windDir) * harbor.exposureScale;
   const c = degToCompass(windDir);
   if (harbor.shelteredDirs?.includes(c)) e *= 0.4;
   if (harbor.exposedDirs?.includes(c)) e *= 1.4;
@@ -243,6 +267,51 @@ export const HARBORS: Harbor[] = [
       entrance: "The most exposed of the Jackson Park basins — open to the east and northeast.",
       docking: "Mooring and transient space; expect motion on a lake swell.",
       hazards: "Wave surge works right into the outer basin on an onshore blow.",
+    },
+  },
+
+  // ── Michigan (east/south) shore ──────────────────────────────────────────────
+  // Unlike Chicago's west shore, here a WEST wind is the big onshore wave-maker, so
+  // each sets openWaterBearing to rotate the fetch shape, plus its own IWX office +
+  // KGRR radar (and, where available, a local webcam).
+  {
+    id: "st-joseph",
+    waveGrid: "IWX/19,82",
+    name: "St. Joseph West Basin Marina",
+    lat: 42.1146, lon: -86.4834,
+    entranceBearing: 270,
+    exposureScale: 0.5,
+    openWaterBearing: 290,
+    exposedDirs: ["W", "WNW"],
+    buoyStation: "45170",
+    marineZone: "LMZ043",
+    discussionOffice: "IWX",
+    radarStation: "KGRR",
+    webcamUrl: "",
+    notes: {
+      entrance: "Inside the St. Joseph River mouth behind the piers; the west-facing approach takes the brunt of a lake wind.",
+      docking: "Sheltered once you're in, but the pierhead gap is exposed to a building westerly.",
+      hazards: "Strong current where the river meets the lake, and shoaling off the pier ends.",
+    },
+  },
+  {
+    id: "new-buffalo",
+    waveGrid: "IWX/11,68",
+    name: "New Buffalo Municipal Marina",
+    lat: 41.7982, lon: -86.7475,
+    entranceBearing: 300,
+    exposureScale: 0.55,
+    openWaterBearing: 330,
+    exposedDirs: ["NW", "NNW", "N"],
+    buoyStation: "MCYI3",
+    marineZone: "LMZ046",
+    discussionOffice: "IWX",
+    radarStation: "KGRR",
+    webcamUrl: "https://www.glerl.noaa.gov/metdata/mcy/mcy01.jpg",
+    notes: {
+      entrance: "Breakwater-protected basin at the Galien River mouth; the NW-facing entrance is open to the long up-lake fetch.",
+      docking: "Roomy modern basin with floating docks; easy once inside.",
+      hazards: "Sand builds in the entrance channel — favor the marked deep water, especially after a blow.",
     },
   },
 ];

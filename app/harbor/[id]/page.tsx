@@ -31,6 +31,7 @@ interface Bundle {
   sun: { sunrise: string; sunset: string };
   stormHours: string[];
   radarStation: string;
+  webcamUrl: string;
 }
 
 const ADVISORY_LABEL: Record<string, string> = {
@@ -203,25 +204,27 @@ export default function HarborDetail() {
         </Panel>
 
         {/* Radar */}
-        <Panel title="Radar — Chicago (KLOT)">
+        <Panel title={`Radar (${b.radarStation})`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={`https://radar.weather.gov/ridge/standard/K${b.radarStation}_loop.gif?t=${bust}`}
-            alt="NWS Chicago radar loop"
+            src={`https://radar.weather.gov/ridge/standard/${b.radarStation}_loop.gif?t=${bust}`}
+            alt={`NWS ${b.radarStation} radar loop`}
             className="w-full rounded-lg border border-white/10"
           />
         </Panel>
 
-        {/* Webcam */}
-        <Panel title="Lakefront webcam (GLERL)">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`https://www.glerl.noaa.gov/metdata/chi/chi01.jpg?t=${bust}`}
-            alt="GLERL Chicago lakefront webcam"
-            className="w-full rounded-lg border border-white/10"
-          />
-          <p className="mt-2 text-[11px] text-slate-500">NOAA GLERL Chicago camera — nearest public lakefront view.</p>
-        </Panel>
+        {/* Webcam — only for harbors that have one */}
+        {b.webcamUrl && (
+          <Panel title="Lakefront webcam (GLERL)">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`${b.webcamUrl}?t=${bust}`}
+              alt="GLERL lakefront webcam"
+              className="w-full rounded-lg border border-white/10"
+            />
+            <p className="mt-2 text-[11px] text-slate-500">NOAA GLERL camera — nearest public lakefront view.</p>
+          </Panel>
+        )}
 
         {/* Forecast discussion */}
         <Panel title="NOAA forecast discussion" className="lg:col-span-2">

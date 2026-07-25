@@ -3,7 +3,7 @@
 // forecast discussion, and sun times. The browser derives the rating + sail
 // window from this against the user's boat + skill.
 
-import { getHarbor } from "@/lib/harbors";
+import { getHarbor, DEFAULT_DISCUSSION_OFFICE, DEFAULT_RADAR_STATION, DEFAULT_WEBCAM_URL } from "@/lib/harbors";
 import { getHarborConditions, getStormHours } from "@/lib/conditions";
 import { getBuoyWindHistory } from "@/lib/ndbc";
 import { getGridpointHourly, getMarineForecast, getDiscussion } from "@/lib/nws";
@@ -20,16 +20,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     getHarborConditions(harbor),
     getGridpointHourly(harbor.waveGrid),
     getMarineForecast(harbor.marineZone),
-    getDiscussion("LOT"),
+    getDiscussion(harbor.discussionOffice ?? DEFAULT_DISCUSSION_OFFICE),
     getStormHours(),
   ]);
 
-  // Prefer the harbor's own station for wind history; fall back to 45198.
-  let windHistory = await getBuoyWindHistory(harbor.buoyStation);
-  if (windHistory.length < 3 && harbor.buoyStation !== "45198") {
-    windHistory = await getBuoyWindHistory("45198");
-  }
-
+  const windHistory = await getBuoyWindHistory(harbor.buoyStation);
   const { sunrise, sunset } = getSunTimes(harbor.lat, harbor.lon);
 
   return Response.json({
@@ -43,6 +38,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     discussion: discussion ? { text: discussion.text, issued: discussion.issued } : null,
     sun: { sunrise: sunrise.toISOString(), sunset: sunset.toISOString() },
     stormHours,
-    radarStation: "LOT",
+    radarStation: harbor.radarStation ?? DEFAULT_RADAR_STATION,
+    webcamUrl: harbor.webcamUrl ?? DEFAULT_WEBCAM_URL,
   });
 }
