@@ -28,10 +28,12 @@ export interface Harbor {
   /** Nearest NDBC station for localized data (wind/temp). */
   buoyStation: string;
   /** Optional dedicated wave buoy sitting right off the harbor. When set, its
-   *  OBSERVED wave height is blended with the gridpoint model (observation-weighted)
-   *  for current conditions — use when a wave-only buoy (e.g. 45186/45187) is closer
-   *  than buoyStation. The NWS gridpoint still drives the wave forecast series. */
-  waveBuoy?: string;
+   *  OBSERVED wave height is blended with the gridpoint model for current conditions,
+   *  weighted by `km` (the buoy's distance from the harbor — closer ⇒ more weight, see
+   *  waveObsWeight). Use when a buoy is nearer than buoyStation for waves; it's often a
+   *  wave-only buoy (e.g. 45186/45187) but may be the same station as buoyStation. The
+   *  NWS gridpoint still drives the wave forecast series. */
+  waveBuoy?: { station: string; km: number };
   /** NWS nearshore marine zone for forecasts + advisories. */
   marineZone: string;
   /** NWS gridpoint (e.g. "LOT/76,76") for the harbor's offshore point — carries
@@ -124,6 +126,7 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.7,
     exposedDirs: ["SE", "SSE"],
     buoyStation: "CHII2",
+    waveBuoy: { station: "45198", km: 10 },
     marineZone: "LMZ742",
     notes: {
       entrance: "Wide SE-facing mouth behind the curving breakwater; open to south/southeast swell.",
@@ -140,6 +143,7 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.9,
     exposedDirs: ["NE", "ENE", "N"],
     buoyStation: "CHII2",
+    waveBuoy: { station: "45198", km: 8 },
     marineZone: "LMZ742",
     notes: {
       entrance: "The breakwall gap opens to the northeast. Strong NE winds stack steep waves right at the mouth, making the exit the hardest part of the day.",
@@ -156,6 +160,7 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.3,
     shelteredDirs: ["W", "WSW", "SW", "WNW", "NW", "S", "SSW"],
     buoyStation: "CHII2",
+    waveBuoy: { station: "45198", km: 8 },
     marineZone: "LMZ742",
     notes: {
       entrance: "Reached through a narrow channel off the lagoon — one of the most protected harbors in the system.",
@@ -172,6 +177,7 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.45,
     shelteredDirs: ["W", "WSW", "SW", "WNW", "NW"],
     buoyStation: "45198",
+    waveBuoy: { station: "45198", km: 4 },
     marineZone: "LMZ742",
     notes: {
       entrance: "Tucked behind the main Chicago Harbor breakwater at the foot of Randolph — well sheltered.",
@@ -188,6 +194,7 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.75,
     exposedDirs: ["NE", "ENE", "E"],
     buoyStation: "45198",
+    waveBuoy: { station: "45198", km: 4 },
     marineZone: "LMZ742",
     notes: {
       entrance: "A large open mooring field behind the outer breakwater; more exposed than the slip harbors.",
@@ -204,6 +211,7 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.45,
     shelteredDirs: ["N", "NNE", "NE", "ENE", "E", "NW", "WNW"],
     buoyStation: "45198",
+    waveBuoy: { station: "45198", km: 5 },
     marineZone: "LMZ742",
     notes: {
       entrance: "Sheltered between Northerly Island and the Museum Campus peninsula; stays workable when the lake is up.",
@@ -220,6 +228,7 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.6,
     exposedDirs: ["E", "ESE"],
     buoyStation: "45198",
+    waveBuoy: { station: "45198", km: 7 },
     marineZone: "LMZ742",
     notes: {
       entrance: "Modern harbor behind a substantial breakwater; the E-facing entrance takes direct easterly seas.",
@@ -292,7 +301,7 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.5,
     exposedDirs: ["NE", "ENE", "E"],
     buoyStation: "45199",
-    waveBuoy: "45187",
+    waveBuoy: { station: "45187", km: 10 },
     marineZone: "LMZ646",
     discussionOffice: "MKX",
     radarStation: "KMKX",
@@ -312,7 +321,7 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.5,
     exposedDirs: ["E", "ESE", "NE"],
     buoyStation: "45199",
-    waveBuoy: "45187",
+    waveBuoy: { station: "45187", km: 2 },
     marineZone: "LMZ646",
     discussionOffice: "MKX",
     radarStation: "KMKX",
@@ -332,7 +341,7 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.55,
     exposedDirs: ["NE", "E", "ESE"],
     buoyStation: "CHII2",
-    waveBuoy: "45186",
+    waveBuoy: { station: "45186", km: 3 },
     marineZone: "LMZ740",
     webcamUrl: "",
     notes: {
@@ -350,7 +359,7 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.6,
     exposedDirs: ["NE", "ENE", "E"],
     buoyStation: "CHII2",
-    waveBuoy: "45186",
+    waveBuoy: { station: "45186", km: 7 },
     marineZone: "LMZ740",
     webcamUrl: "",
     notes: {
@@ -413,7 +422,8 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.5,
     openWaterBearing: 290,
     exposedDirs: ["W", "WNW"],
-    buoyStation: "45029",
+    buoyStation: "45168",
+    waveBuoy: { station: "45168", km: 4 },
     marineZone: "LMZ844",
     discussionOffice: "GRR",
     radarStation: "KGRR",

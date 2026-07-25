@@ -13,7 +13,7 @@ Michigan harbors (St. Joseph, New Buffalo) are worked examples in `lib/harbors.t
 |---|---|---|
 | `id`, `name`, `lat`, `lon` | identity + location | the marina's coordinates |
 | `buoyStation` | NDBC station for **live wind + temp** | nearest station with a `realtime2` feed (step 2) |
-| `waveBuoy?` | dedicated wave buoy right off the harbor | optional — a wave-only buoy (e.g. `45186`/`45187`) closer than `buoyStation`; its **observed** wave is blended with the gridpoint model (step 2) |
+| `waveBuoy?` | `{ station, km }` — a wave buoy right off the harbor + its distance | optional — a buoy closer than `buoyStation` for waves; its **observed** wave is blended with the gridpoint model, weighted by `km` (closer ⇒ more weight). Often a wave-only buoy like `45186`/`45187` (step 2) |
 | `marineZone` | NWS nearshore zone (advisories, wave text) | from the point lookup (step 1) — e.g. `LMZ043` |
 | `waveGrid` | NWS gridpoint `OFFICE/x,y` for **per-harbor waves + marine wind** | from the point lookup (step 1) — e.g. `IWX/19,82` |
 | `openWaterBearing?` | bearing (°true) toward **open water / longest fetch** | **the key shore-aware field** (step 3). Unset ⇒ Chicago west-shore default |
@@ -64,8 +64,12 @@ curl -s "https://www.ndbc.noaa.gov/data/realtime2/45170.txt" | sed -n '1p;3p'
 - No waves in the buoy (`WVHT = MM`) is fine — waves come from `waveGrid`.
 - The reverse also happens: a **wave-only** buoy (`WDIR`/`WSPD` always `MM`, `WVHT`
   present — e.g. `45186` Waukegan, `45187` Winthrop Harbor) can't drive wind, but if it
-  sits right off the harbor, set it as **`waveBuoy`** so its observed wave is blended
-  with the gridpoint model (observation-weighted), while `buoyStation` handles wind.
+  sits right off the harbor, set it as **`waveBuoy: { station, km }`** so its observed
+  wave is blended with the gridpoint model, while `buoyStation` handles wind. `km` is the
+  buoy→harbor distance (haversine); it sets the blend weight — closer earns more (see
+  `waveObsWeight`), so even a marginal 15–20 km buoy can contribute at reduced weight.
+  The same station can be both `buoyStation` and `waveBuoy` if it reports wind **and**
+  waves and is the closest option (e.g. South Haven's `45168`).
 
 ⚠️ **Verify the station's actual coordinates, not its name.** A station's label can be
 misleading — `45170` is the "Michigan City Buoy" ~78 km from South Haven, so it's a poor
