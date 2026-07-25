@@ -62,6 +62,15 @@ curl -s "https://www.ndbc.noaa.gov/data/realtime2/45170.txt" | sed -n '1p;3p'
   buoy, or the nearest GLERL met station like `MCYI3`).
 - No waves in the buoy (`WVHT = MM`) is fine — waves come from `waveGrid`.
 
+⚠️ **Verify the station's actual coordinates, not its name.** A station's label can be
+misleading — `45170` is the "Michigan City Buoy" ~78 km from South Haven, so it's a poor
+wind source there despite being easy to find. Confirm the lat/lon and pick the genuinely
+nearest offshore buoy:
+
+```bash
+curl -s "https://www.ndbc.noaa.gov/data/stations/station_table.txt" | grep -Ei '^(45026|45029|45161)\b'
+```
+
 ## Step 3 — set the fetch orientation (`openWaterBearing`) ⚠️ the important one
 
 The exposure model has a base fetch *shape* calibrated for **Chicago's west shore**
