@@ -6,7 +6,7 @@ import { useAuth } from "./auth";
 import { BOATS, SKILLS, Skill } from "@/lib/boats";
 
 export function Header() {
-  const { boatId, skill, setBoatId, setSkill } = usePrefs();
+  const { boatId, skill, setBoatId, setSkill, customBoats } = usePrefs();
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/70 backdrop-blur">
@@ -34,6 +34,15 @@ export function Header() {
                   {b.name}
                 </option>
               ))}
+              {customBoats.length > 0 && (
+                <optgroup label="Your boats">
+                  {customBoats.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </label>
 
@@ -74,6 +83,13 @@ function AuthControl() {
   }
   return (
     <div className="flex items-center gap-2 text-sm sm:ml-2">
+      <Link
+        href="/boats"
+        title="My boats"
+        className="whitespace-nowrap rounded-md border border-white/10 bg-slate-900 px-3 py-1.5 text-slate-300 hover:text-white"
+      >
+        ⛵ Boats
+      </Link>
       <Link
         href="/alerts"
         title="Your alerts"

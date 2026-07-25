@@ -6,7 +6,6 @@ import { usePrefs } from "@/components/prefs";
 import { HarborCard } from "@/components/HarborCard";
 import { STATUS_META, statusRank } from "@/components/status-meta";
 import { getHarbor } from "@/lib/harbors";
-import { getBoat } from "@/lib/boats";
 import { rate } from "@/lib/rating";
 import { Conditions } from "@/lib/types";
 
@@ -24,7 +23,7 @@ function relative(iso: string, now: number): string {
 }
 
 export default function Board() {
-  const { boatId, skill } = usePrefs();
+  const { skill, boat } = usePrefs();
   const [data, setData] = useState<ApiConditions | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -56,7 +55,6 @@ export default function Board() {
     };
   }, []);
 
-  const boat = getBoat(boatId);
 
   const ranked = useMemo(() => {
     if (!data) return [];

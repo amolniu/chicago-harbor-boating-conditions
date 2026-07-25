@@ -10,7 +10,6 @@ import { WindChart } from "@/components/WindChart";
 import { HourStrip } from "@/components/HourStrip";
 import { STATUS_META } from "@/components/status-meta";
 import { getHarbor } from "@/lib/harbors";
-import { getBoat } from "@/lib/boats";
 import { rate } from "@/lib/rating";
 import { computeWindow } from "@/lib/window";
 import { harborIntel } from "@/lib/intel";
@@ -48,11 +47,10 @@ const SEV: Record<IntelSeverity, { dot: string; label: string; text: string }> =
 
 export default function HarborDetail() {
   const { id } = useParams<{ id: string }>();
-  const { boatId, skill } = usePrefs();
+  const { skill, boat } = usePrefs();
   const [b, setB] = useState<Bundle | null>(null);
   const [error, setError] = useState(false);
   const harbor = getHarbor(id);
-  const boat = getBoat(boatId);
 
   useEffect(() => {
     let live = true;

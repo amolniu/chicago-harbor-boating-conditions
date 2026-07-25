@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/components/auth";
+import { usePrefs } from "@/components/prefs";
 import { AlertPrefs, AlertRules, defaultPrefs, loadPrefs, savePrefs } from "@/lib/userPrefs";
 import { HARBORS } from "@/lib/harbors";
 import { BOATS, SKILLS, Skill } from "@/lib/boats";
@@ -11,6 +12,7 @@ import { COMPASS_16, Compass16 } from "@/lib/units";
 
 export default function AlertsPage() {
   const { user, loading } = useAuth();
+  const { customBoats } = usePrefs();
   const router = useRouter();
   const [prefs, setPrefs] = useState<AlertPrefs | null>(null);
   const [saving, setSaving] = useState(false);
@@ -97,6 +99,11 @@ export default function AlertsPage() {
             className="rounded-md border border-white/10 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-400"
           >
             {BOATS.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {customBoats.length > 0 && (
+              <optgroup label="Your boats">
+                {customBoats.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </optgroup>
+            )}
           </select>
           <div className="flex overflow-hidden rounded-md border border-white/10">
             {SKILLS.map((s) => (

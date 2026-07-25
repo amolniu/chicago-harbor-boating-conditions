@@ -134,7 +134,8 @@ export function harborIntel(harbor: Harbor, c: Conditions, boat: BoatProfile, sk
   // Cold water & safety — immersion risk, sterner for open/small boats.
   if (c.waterTempF != null) {
     const t = c.waterTempF;
-    const smallBoat = ["kayak-sup", "daysailer", "hobie"].includes(boat.id);
+    // Low wave tolerance ≈ an open / easily-swamped boat (built-in or custom).
+    const smallBoat = boat.waveMaxFt <= 4.0;
     let severity: IntelSeverity;
     let impact: string;
     if (t < 60) {
