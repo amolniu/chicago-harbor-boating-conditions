@@ -64,3 +64,13 @@ export async function loadCustomBoats(uid: string): Promise<BoatSpec[]> {
 export async function saveCustomBoats(uid: string, boats: BoatSpec[]): Promise<void> {
   await setDoc(doc(db, "users", uid), { customBoats: boats }, { merge: true });
 }
+
+/** Favorite harbor ids live on the same users/{uid} doc (own-document rule covers it). */
+export async function loadFavorites(uid: string): Promise<string[]> {
+  const snap = await getDoc(doc(db, "users", uid));
+  return snap.exists() ? ((snap.data().favorites as string[]) ?? []) : [];
+}
+
+export async function saveFavorites(uid: string, ids: string[]): Promise<void> {
+  await setDoc(doc(db, "users", uid), { favorites: ids }, { merge: true });
+}

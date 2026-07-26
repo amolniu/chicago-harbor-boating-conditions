@@ -14,7 +14,21 @@ function stat(label: string, value: string) {
   );
 }
 
-export function HarborCard({ id, name, conditions: c, rating: r }: { id: string; name: string; conditions: Conditions; rating: Rating }) {
+export function HarborCard({
+  id,
+  name,
+  conditions: c,
+  rating: r,
+  favorite = false,
+  onToggleFavorite,
+}: {
+  id: string;
+  name: string;
+  conditions: Conditions;
+  rating: Rating;
+  favorite?: boolean;
+  onToggleFavorite?: () => void;
+}) {
   const meta = STATUS_META[r.status];
   const wind =
     c.windKt == null
@@ -37,9 +51,34 @@ export function HarborCard({ id, name, conditions: c, rating: r }: { id: string;
           </div>
           <div className={`mt-0.5 text-xs font-medium ${meta.text}`}>{meta.label}</div>
         </div>
-        <div className="text-right text-xs text-slate-500">
-          <div className="font-mono text-lg leading-none text-slate-300">{r.status === "unknown" ? "—" : r.score}</div>
-          <div>score</div>
+        <div className="flex shrink-0 items-start gap-2">
+          <div className="text-right text-xs text-slate-500">
+            <div className="font-mono text-lg leading-none text-slate-300">{r.status === "unknown" ? "—" : r.score}</div>
+            <div>score</div>
+          </div>
+          {onToggleFavorite && (
+            <button
+              type="button"
+              aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+              aria-pressed={favorite}
+              title={favorite ? "Remove from favorites" : "Add to favorites"}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onToggleFavorite();
+              }}
+              className="-mr-1 -mt-1 rounded-md p-1 text-slate-500 transition hover:text-amber-300"
+            >
+              <svg
+                viewBox="0 0 20 20"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+                className={`h-[18px] w-[18px] ${favorite ? "fill-amber-400 stroke-amber-400" : "fill-none stroke-current"}`}
+              >
+                <path d="M10 1.8l2.47 5.01 5.53.8-4 3.9.94 5.5L10 14.4l-4.94 2.6.94-5.5-4-3.9 5.53-.8L10 1.8z" />
+              </svg>
+            </button>
+          )}
         </div>
       </div>
 

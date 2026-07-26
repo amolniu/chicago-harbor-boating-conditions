@@ -5,9 +5,11 @@ import Link from "next/link";
 import { usePrefs } from "@/components/prefs";
 import { HarborCard } from "@/components/HarborCard";
 import { STATUS_META, statusRank } from "@/components/status-meta";
-import { getHarbor } from "@/lib/harbors";
+import { getHarbor, REGIONS, regionOf, type RegionId } from "@/lib/harbors";
 import { rate } from "@/lib/rating";
 import { Conditions } from "@/lib/types";
+
+type FilterKey = "all" | "favorites" | RegionId;
 
 interface ApiConditions {
   updatedAt: string;
@@ -23,11 +25,12 @@ function relative(iso: string, now: number): string {
 }
 
 export default function Board() {
-  const { skill, boat } = usePrefs();
+  const { skill, boat, favorites, toggleFavorite } = usePrefs();
   const [data, setData] = useState<ApiConditions | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(() => Date.now());
+  const [filter, setFilter] = useState<FilterKey>("all");
 
   async function load() {
     setLoading(true);
@@ -55,6 +58,17 @@ export default function Board() {
     };
   }, []);
 
+  useEffect(() => {
+    // Remember the last-used filter.
+    const f = localStorage.getItem("harborFilter");
+    const valid = new Set<string>(["all", "favorites", ...REGIONS.map((r) => r.id)]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (f && valid.has(f)) setFilter(f as FilterKey);
+  }, []);
+  useEffect(() => {
+    localStorage.setItem("harborFilter", filter);
+  }, [filter]);
+
 
   const ranked = useMemo(() => {
     if (!data) return [];
@@ -66,7 +80,24 @@ export default function Board() {
       .sort((a, b) => statusRank(a.rating.status) - statusRank(b.rating.status) || b.rating.score - a.rating.score);
   }, [data, boat, skill]);
 
-  const best = ranked.filter((h) => h.rating.status === "green").slice(0, 3);
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: ranked.length, favorites: 0 };
+    for (const r of REGIONS) c[r.id] = 0;
+    for (const h of ranked) {
+      const rg = regionOf(h.id);
+      if (rg) c[rg] += 1;
+      if (favorites.includes(h.id)) c.favorites += 1;
+    }
+    return c;
+  }, [ranked, favorites]);
+
+  const filtered = useMemo(() => {
+    if (filter === "all") return ranked;
+    if (filter === "favorites") return ranked.filter((h) => favorites.includes(h.id));
+    return ranked.filter((h) => regionOf(h.id) === filter);
+  }, [ranked, filter, favorites]);
+
+  const best = filtered.filter((h) => h.rating.status === "green").slice(0, 3);
 
   return (
     <div>
@@ -88,8 +119,37 @@ export default function Board() {
         </div>
       </div>
 
-      {/* Best harbor right now */}
+      {/* Region + favorites filter */}
       {ranked.length > 0 && (
+        <div className="mb-5 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+          {(
+            [
+              { key: "all", label: "All" },
+              { key: "favorites", label: "★ Favorites" },
+              ...REGIONS.map((r) => ({ key: r.id, label: r.label })),
+            ] as { key: FilterKey; label: string }[]
+          ).map((chip) => {
+            const active = filter === chip.key;
+            return (
+              <button
+                key={chip.key}
+                onClick={() => setFilter(chip.key)}
+                className={`shrink-0 rounded-full border px-3 py-1.5 text-sm transition ${
+                  active
+                    ? "border-sky-400/50 bg-sky-500/15 text-sky-200"
+                    : "border-white/10 bg-slate-900 text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {chip.label}
+                <span className="ml-1.5 font-mono text-xs text-slate-500">{counts[chip.key] ?? 0}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Best harbor right now */}
+      {filtered.length > 0 && (
         <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <div className="text-xs uppercase tracking-wide text-slate-500">Best harbor right now</div>
           {best.length ? (
@@ -108,7 +168,7 @@ export default function Board() {
             </div>
           ) : (
             <p className="mt-1 text-sm text-slate-300">
-              Nothing is fully green for a {boat.name} right now — {ranked[0].name} is the closest ({ranked[0].rating.score}).
+              Nothing is fully green for a {boat.name} right now — {filtered[0].name} is the closest ({filtered[0].rating.score}).
             </p>
           )}
         </div>
@@ -121,9 +181,23 @@ export default function Board() {
         </div>
       )}
 
+      {data && !loading && filter === "favorites" && filtered.length === 0 && (
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-6 text-center text-sm text-slate-400">
+          No favorites yet — tap the ☆ on any harbor to pin it here.
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {ranked.map((h) => (
-          <HarborCard key={h.id} id={h.id} name={h.name} conditions={h.conditions} rating={h.rating} />
+        {filtered.map((h) => (
+          <HarborCard
+            key={h.id}
+            id={h.id}
+            name={h.name}
+            conditions={h.conditions}
+            rating={h.rating}
+            favorite={favorites.includes(h.id)}
+            onToggleFavorite={() => toggleFavorite(h.id)}
+          />
         ))}
       </div>
 

@@ -610,3 +610,32 @@ export const HARBORS: Harbor[] = [
 export function getHarbor(id: string): Harbor | undefined {
   return HARBORS.find((h) => h.id === id);
 }
+
+// ── Regions ──────────────────────────────────────────────────────────────────
+// A coarse geographic grouping for the board's region filter, north/south →
+// west/east. Keep REGION_MEMBERS in sync with HARBORS when adding a harbor;
+// lib/harbors.test.ts asserts every harbor maps to exactly one region.
+export type RegionId = "chicago" | "north-shore" | "michigan-east" | "green-bay";
+
+export const REGIONS: { id: RegionId; label: string }[] = [
+  { id: "chicago", label: "Chicago" },
+  { id: "north-shore", label: "North Shore" },
+  { id: "michigan-east", label: "Michigan" },
+  { id: "green-bay", label: "Green Bay" },
+];
+
+const REGION_MEMBERS: Record<RegionId, string[]> = {
+  chicago: ["montrose", "belmont", "diversey", "dusable", "monroe", "burnham", "31st", "59th", "jackson-inner", "jackson-outer"],
+  "north-shore": ["great-lakes-marina", "waukegan", "north-point", "southport"],
+  "michigan-east": ["new-buffalo", "st-joseph", "south-haven", "grand-haven", "muskegon", "whitehall"],
+  "green-bay": ["menominee", "cedar-river", "escanaba", "fayette", "gladstone"],
+};
+
+const REGION_OF: Record<string, RegionId> = Object.fromEntries(
+  (Object.entries(REGION_MEMBERS) as [RegionId, string[]][]).flatMap(([r, ids]) => ids.map((id) => [id, r] as const)),
+);
+
+/** The region a harbor belongs to (undefined if it hasn't been assigned one). */
+export function regionOf(id: string): RegionId | undefined {
+  return REGION_OF[id];
+}

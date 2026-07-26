@@ -112,9 +112,10 @@ actually the big onshore wave-maker), so it's the field to double-check.
 
 ## Step 5 — add the config, seed the rest, test
 
-Add the object to `HARBORS`. Seed `exposureScale`, `entranceBearing`,
-`exposed/shelteredDirs`, and `notes` from the chart + local knowledge (all tunable
-later — they're a living dataset). Then:
+Add the object to `HARBORS`, and add its `id` to `REGION_MEMBERS` (its group in the
+board's region filter — `lib/harbors.test.ts` fails if a harbor has no region). Seed
+`exposureScale`, `entranceBearing`, `exposed/shelteredDirs`, and `notes` from the chart
++ local knowledge (all tunable later — they're a living dataset). Then:
 
 ```bash
 npx tsc --noEmit && npm test          # add/extend a fetch-orientation test in lib/harbors.test.ts
