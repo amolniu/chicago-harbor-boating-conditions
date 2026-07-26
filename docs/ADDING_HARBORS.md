@@ -24,6 +24,7 @@ Michigan harbors (St. Joseph, New Buffalo) are worked examples in `lib/harbors.t
 | `discussionOffice?` | NWS office for the Area Forecast Discussion | from the point lookup `office` (default `LOT`) |
 | `radarStation?` | NWS RIDGE radar, e.g. `KGRR` | nearest radar covering the shoreline (default `KLOT`) |
 | `webcamUrl?` | lakefront webcam image URL | a GLERL cam if one exists nearby; `""` hides the panel |
+| `timezone?` | IANA tz for local-time copy (storm headlines) | default `America/Chicago`; Michigan's east shore **and Delta County in the UP** are `America/Detroit`, while the far-western UP (Menominee, Dickinson, Iron, Gogebic counties) stays Central |
 | `notes` | entrance / docking / hazards local knowledge | local knowledge (seed) |
 
 ## Step 1 — resolve marine zone + wave gridpoint + office
@@ -122,11 +123,15 @@ npx tsc --noEmit && npm test          # add/extend a fetch-orientation test in l
 npm run dev                           # open /harbor/<id>, check conditions + intelligence render
 ```
 
+Nothing needs doing for the **thunderstorm outlook**: harbors are grouped into ~0.5°
+storm cells automatically (`stormCellKey`), and each cell is queried once at the centroid
+of its harbors, so a new harbor lands in the right cell (or opens its own) with no config.
+
 ## Known limitations to generalize when scaling further
 
 - **Wind-history graph** uses only the harbor's own buoy; a good fallback would be
   the harbor's gridpoint wind (model) rather than any cross-region buoy.
 - **Exposure numbers are seed values** — the whole point is to refine them with real
   local sailor input over time.
-- The **storm outlook** is one Chicago-metro HRRR point; for far-flung harbors it
-  should query a point near each region.
+- **Marine advisories** come from the harbor's own `marineZone`, but the sail-window
+  wave estimate still leans on `estimateWaveFt()` where the gridpoint has no wave data.

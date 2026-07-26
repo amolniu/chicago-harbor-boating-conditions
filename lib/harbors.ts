@@ -53,6 +53,10 @@ export interface Harbor {
   discussionOffice?: string;
   /** NWS RIDGE radar station, e.g. "KLOT". Default "KLOT" (Chicago). */
   radarStation?: string;
+  /** IANA timezone for local-time copy (e.g. storm headlines). Default
+   *  "America/Chicago". Michigan's east shore — and Delta County in the UP — are
+   *  Eastern ("America/Detroit"), while the far-western UP stays Central. */
+  timezone?: string;
   /** Lakefront webcam image URL. Default the GLERL Chicago cam; empty string hides the panel. */
   webcamUrl?: string;
   notes: {
@@ -383,6 +387,7 @@ export const HARBORS: Harbor[] = [
     waveGrid: "IWX/19,82",
     name: "St. Joseph West Basin Marina",
     lat: 42.1146, lon: -86.4834,
+    timezone: "America/Detroit",
     entranceBearing: 270,
     exposureScale: 0.5,
     openWaterBearing: 290,
@@ -403,6 +408,7 @@ export const HARBORS: Harbor[] = [
     waveGrid: "IWX/11,68",
     name: "New Buffalo Municipal Marina",
     lat: 41.7982, lon: -86.7475,
+    timezone: "America/Detroit",
     entranceBearing: 300,
     exposureScale: 0.55,
     openWaterBearing: 330,
@@ -423,6 +429,7 @@ export const HARBORS: Harbor[] = [
     waveGrid: "GRR/21,20",
     name: "South Haven Municipal Marina",
     lat: 42.4039, lon: -86.2782,
+    timezone: "America/Detroit",
     entranceBearing: 270,
     exposureScale: 0.5,
     openWaterBearing: 290,
@@ -444,6 +451,7 @@ export const HARBORS: Harbor[] = [
     waveGrid: "GRR/19,50",
     name: "Grand Haven Municipal Marina",
     lat: 43.0669, lon: -86.2339,
+    timezone: "America/Detroit",
     entranceBearing: 270,
     exposureScale: 0.45,
     openWaterBearing: 285,
@@ -464,6 +472,7 @@ export const HARBORS: Harbor[] = [
     waveGrid: "GRR/16,58",
     name: "Muskegon Hartshorn Municipal Marina",
     lat: 43.2306, lon: -86.2660,
+    timezone: "America/Detroit",
     entranceBearing: 270,
     exposureScale: 0.3,
     openWaterBearing: 285,
@@ -484,6 +493,7 @@ export const HARBORS: Harbor[] = [
     waveGrid: "GRR/12,66",
     name: "Whitehall White Lake Municipal Marina",
     lat: 43.4101, lon: -86.3524,
+    timezone: "America/Detroit",
     entranceBearing: 255,
     exposureScale: 0.2,
     openWaterBearing: 285,
@@ -550,6 +560,7 @@ export const HARBORS: Harbor[] = [
     waveGrid: "MQT/168,32",
     name: "Escanaba Municipal Marina",
     lat: 45.7428, lon: -87.0448,
+    timezone: "America/Detroit", // Delta County keeps Eastern time
     entranceBearing: 120,
     exposureScale: 0.3,
     openWaterBearing: 160,
@@ -570,6 +581,7 @@ export const HARBORS: Harbor[] = [
     waveGrid: "MQT/178,33",
     name: "Fayette State Harbor",
     lat: 45.7192, lon: -86.6696,
+    timezone: "America/Detroit", // Delta County keeps Eastern time
     entranceBearing: 270,
     exposureScale: 0.15,
     openWaterBearing: 250,
@@ -590,6 +602,7 @@ export const HARBORS: Harbor[] = [
     waveGrid: "MQT/167,35",
     name: "Gladstone Marina",
     lat: 45.8396, lon: -87.0196,
+    timezone: "America/Detroit", // Delta County keeps Eastern time
     entranceBearing: 160,
     exposureScale: 0.25,
     openWaterBearing: 180,

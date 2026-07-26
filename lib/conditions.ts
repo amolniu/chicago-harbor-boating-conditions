@@ -9,7 +9,7 @@ import { Conditions, type StormRisk } from "./types";
 import { Harbor, HARBORS } from "./harbors";
 import { BuoyCurrent, getBuoyCurrent } from "./ndbc";
 import { getMarineForecast, getGridCurrent, type GridCurrent } from "./nws";
-import { getStormOutlook } from "./storm";
+import { getStormOutlook, stormCellKey } from "./storm";
 import { rate } from "./rating";
 import { getBoat, DEFAULT_BOAT_ID, DEFAULT_SKILL } from "./boats";
 import { getDb } from "@/db";
@@ -29,7 +29,36 @@ export function waveObsWeight(km: number): number {
   const t = Math.max(0, Math.min(1, km / WAVE_OBS_FAR_KM));
   return WAVE_OBS_WEIGHT_NEAR - t * (WAVE_OBS_WEIGHT_NEAR - WAVE_OBS_WEIGHT_FAR);
 }
-const CHICAGO = { lat: 41.8899, lon: -87.61 }; // metro point for the (regional) storm outlook
+// Storm outlook is resolved per geographic CELL, not from one metro point: nearby
+// harbors legitimately share a thunderstorm outlook, but harbors hundreds of km apart
+// must not (a Chicago squall shouldn't red out Green Bay, and a storm over Escanaba
+// must not go unseen). Harbors are grouped by stormCellKey and each cell is queried
+// once, at the CENTROID of its harbors — a real point among them rather than an
+// arbitrary grid node. Cells are derived from HARBORS, so new harbors need no config.
+const STORM_CELLS = (() => {
+  const acc = new Map<string, { lat: number; lon: number; n: number; tz?: string }>();
+  for (const h of HARBORS) {
+    const key = stormCellKey(h.lat, h.lon);
+    const g = acc.get(key);
+    if (g) {
+      g.lat += h.lat;
+      g.lon += h.lon;
+      g.n += 1;
+    } else {
+      // Harbors in one cell are within ~50 km, so the first one's timezone applies to
+      // the whole cell. Using the cell's tz (not each harbor's) keeps the headline
+      // identical on the board and the detail page.
+      acc.set(key, { lat: h.lat, lon: h.lon, n: 1, tz: h.timezone });
+    }
+  }
+  return new Map(
+    Array.from(acc, ([key, g]) => [key, { lat: g.lat / g.n, lon: g.lon / g.n, tz: g.tz }] as const),
+  );
+})();
+
+function stormCellFor(harbor: Harbor): { lat: number; lon: number; tz?: string } {
+  return STORM_CELLS.get(stormCellKey(harbor.lat, harbor.lon)) ?? { lat: harbor.lat, lon: harbor.lon, tz: harbor.timezone };
+}
 
 // Ordered wind fallbacks used when a harbor's own station has no wind (e.g. buoy
 // 45198's anemometer drops out while its wave sensor keeps reporting). All the
@@ -157,9 +186,11 @@ function toStormRisk(o: Awaited<ReturnType<typeof getStormOutlook>>): StormRisk 
   return o ? { level: o.level, headline: o.headline, capeNow: o.capeNow } : undefined;
 }
 
-/** Top-of-hour ISO timestamps flagged thunderstorm-likely (for the sail window). */
-export async function getStormHours(): Promise<string[]> {
-  const o = await getStormOutlook(CHICAGO.lat, CHICAGO.lon);
+/** Top-of-hour ISO timestamps flagged thunderstorm-likely (for the sail window),
+ *  for this harbor's storm cell. */
+export async function getStormHours(harbor: Harbor): Promise<string[]> {
+  const cell = stormCellFor(harbor);
+  const o = await getStormOutlook(cell.lat, cell.lon, cell.tz);
   return o?.stormyHours ?? [];
 }
 
@@ -174,21 +205,29 @@ export async function getAllConditions(): Promise<HarborConditions[]> {
   const zones = uniq(HARBORS.map((h) => h.marineZone));
   const grids = uniq(HARBORS.map((h) => h.waveGrid));
 
-  const [buoyEntries, gridEntries, marineEntries, stormOutlook] = await Promise.all([
+  const [buoyEntries, gridEntries, marineEntries, stormEntries] = await Promise.all([
     Promise.all(stations.map(async (s) => [s, await getBuoyCurrent(s)] as const)),
     Promise.all(grids.map(async (g) => [g, await getGridCurrent(g)] as const)),
     Promise.all(zones.map(async (z) => [z, (await getMarineForecast(z)).advisory] as const)),
-    getStormOutlook(CHICAGO.lat, CHICAGO.lon),
+    Promise.all(
+      Array.from(STORM_CELLS, async ([key, p]) => [key, await getStormOutlook(p.lat, p.lon, p.tz)] as const),
+    ),
   ]);
   const buoys = new Map(buoyEntries);
   const gridCur = new Map(gridEntries);
   const advisories = new Map(marineEntries);
-  const storm = toStormRisk(stormOutlook);
+  const storms = new Map(stormEntries);
 
   return HARBORS.map((h) => ({
     id: h.id,
     name: h.name,
-    conditions: assemble(h, buoys, gridCur.get(h.waveGrid) ?? null, advisories.get(h.marineZone) ?? "none", storm),
+    conditions: assemble(
+      h,
+      buoys,
+      gridCur.get(h.waveGrid) ?? null,
+      advisories.get(h.marineZone) ?? "none",
+      toStormRisk(storms.get(stormCellKey(h.lat, h.lon)) ?? null),
+    ),
   }));
 }
 
@@ -199,11 +238,12 @@ export async function getHarborConditions(harbor: Harbor): Promise<Conditions> {
       (s): s is string => !!s,
     ),
   );
+  const cell = stormCellFor(harbor);
   const [buoyEntries, gridCurrent, marine, stormOutlook] = await Promise.all([
     Promise.all(stations.map(async (s) => [s, await getBuoyCurrent(s)] as const)),
     getGridCurrent(harbor.waveGrid),
     getMarineForecast(harbor.marineZone),
-    getStormOutlook(CHICAGO.lat, CHICAGO.lon),
+    getStormOutlook(cell.lat, cell.lon, cell.tz),
   ]);
   return assemble(harbor, new Map(buoyEntries), gridCurrent, marine.advisory, toStormRisk(stormOutlook));
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { classifyStorm, StormHourly } from "./storm";
+import { classifyStorm, stormCellKey, StormHourly } from "./storm";
+import { HARBORS, getHarbor } from "./harbors";
 
 const H = 3600_000;
 
@@ -43,5 +44,38 @@ describe("classifyStorm", () => {
     const o = classifyStorm(hourly(now, Array(12).fill(100), Array(12).fill(0), gust), now);
     expect(o.level).toBe("watch");
     expect(o.gustPeakKt).toBe(30);
+  });
+
+  it("localizes the headline hour to the harbor's timezone", () => {
+    const cape = [100, 200, 400, 1600, 1700, 900, ...Array(6).fill(100)];
+    const precip = [0, 0, 0.1, 0.5, 0.4, 0.1, ...Array(6).fill(0)];
+    const h = hourly(now, cape, precip, Array(12).fill(12));
+    // Same storm, one hour apart in local time: Chicago is Central, Michigan Eastern.
+    expect(classifyStorm(h, now, "America/Chicago").headline).toContain("4 PM");
+    expect(classifyStorm(h, now, "America/Detroit").headline).toContain("5 PM");
+  });
+});
+
+// Thunderstorms are mesoscale: harbors close together may share one HRRR query, but
+// distant ones must each get their own, or a storm is either invented or missed.
+describe("stormCellKey", () => {
+  it("groups harbors that are close together", () => {
+    const belmont = getHarbor("belmont")!;
+    const dusable = getHarbor("dusable")!;
+    expect(stormCellKey(belmont.lat, belmont.lon)).toBe(stormCellKey(dusable.lat, dusable.lon));
+  });
+
+  it("separates harbors in different parts of the lake", () => {
+    const belmont = getHarbor("belmont")!;
+    const escanaba = getHarbor("escanaba")!; // ~430 km north, was sharing Chicago's outlook
+    const whitehall = getHarbor("whitehall")!; // other shore
+    expect(stormCellKey(belmont.lat, belmont.lon)).not.toBe(stormCellKey(escanaba.lat, escanaba.lon));
+    expect(stormCellKey(belmont.lat, belmont.lon)).not.toBe(stormCellKey(whitehall.lat, whitehall.lon));
+  });
+
+  it("collapses the fleet to far fewer query points than harbors", () => {
+    const cells = new Set(HARBORS.map((h) => stormCellKey(h.lat, h.lon)));
+    expect(cells.size).toBeGreaterThan(1);
+    expect(cells.size).toBeLessThan(HARBORS.length);
   });
 });

@@ -21,7 +21,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     getGridpointHourly(harbor.waveGrid),
     getMarineForecast(harbor.marineZone),
     getDiscussion(harbor.discussionOffice ?? DEFAULT_DISCUSSION_OFFICE),
-    getStormHours(),
+    getStormHours(harbor),
   ]);
 
   // Buoy-less harbors (windFromGrid) have no observed wind history to graph.
