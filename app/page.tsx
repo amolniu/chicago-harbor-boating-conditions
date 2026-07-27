@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePrefs } from "@/components/prefs";
 import { HarborCard } from "@/components/HarborCard";
-import { STATUS_META, statusRank } from "@/components/status-meta";
+import { STATUS_META, statusLabel, statusRank } from "@/components/status-meta";
 import { getHarbor, REGIONS, regionOf, type RegionId } from "@/lib/harbors";
 import { rate } from "@/lib/rating";
 import { Conditions } from "@/lib/types";
@@ -195,6 +195,7 @@ export default function Board() {
             name={h.name}
             conditions={h.conditions}
             rating={h.rating}
+            boat={boat}
             favorite={favorites.includes(h.id)}
             onToggleFavorite={() => toggleFavorite(h.id)}
           />
@@ -206,7 +207,7 @@ export default function Board() {
           {(["green", "yellow", "red"] as const).map((s) => (
             <span key={s} className="flex items-center gap-1.5">
               <span className={`h-2.5 w-2.5 rounded-full ${STATUS_META[s].dot}`} />
-              {STATUS_META[s].label}
+              {statusLabel(s, boat)}
             </span>
           ))}
         </div>

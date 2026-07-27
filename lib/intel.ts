@@ -39,6 +39,9 @@ export function harborIntel(harbor: Harbor, c: Conditions, boat: BoatProfile, sk
   const waveFt = c.waveFt;
   const period = c.wavePeriodS;
   const shortP = period != null && period <= 4;
+  // A paddler has no reef, no helm and no slip, and the danger that matters most is
+  // being blown offshore — so several reads below need craft-appropriate wording.
+  const paddle = boat.craft === "paddle";
 
   const items: IntelItem[] = [];
 
@@ -64,22 +67,31 @@ export function harborIntel(harbor: Harbor, c: Conditions, boat: BoatProfile, sk
     items.push({ label: "Entrance", note: harbor.notes.entrance, impact, severity });
   }
 
-  // Docking — crosswind across the channel/slips.
+  // Docking / landing — crosswind across the channel and slips (or the launch).
   {
     let impact = NO_WIND;
     let severity: IntelSeverity = "ok";
     if (hasWind) {
       const cross = crosswindKt(harbor, c.windDir!, windKt);
       severity = sev(cross, boat.crosswindMaxKt * sf * 0.6, boat.crosswindMaxKt * sf);
-      if (severity === "alert") {
-        impact = `${Math.round(cross)} kt of crosswind across the mouth — set up early, hold steerage, and expect to crab into the slip.`;
-      } else if (severity === "watch") {
-        impact = `${Math.round(cross)} kt of crosswind at the entrance — noticeable; carry a little extra speed and commit to the approach.`;
+      const kt = Math.round(cross);
+      if (paddle) {
+        impact =
+          severity === "alert"
+            ? `${kt} kt of crosswind across the mouth — it shoves you sideways the moment you stop paddling. Land bow-into the wind and expect to be set down onto whatever is downwind of you.`
+            : severity === "watch"
+              ? `${kt} kt of crosswind at the entrance — a noticeable side push. Keep paddling through the gap instead of coasting, and aim upwind of your landing.`
+              : `Only ${kt} kt of crosswind across the entrance — an easy launch and landing.`;
       } else {
-        impact = `Only ${Math.round(cross)} kt of crosswind across the entrance — docking should be straightforward.`;
+        impact =
+          severity === "alert"
+            ? `${kt} kt of crosswind across the mouth — set up early, hold steerage, and expect to crab into the slip.`
+            : severity === "watch"
+              ? `${kt} kt of crosswind at the entrance — noticeable; carry a little extra speed and commit to the approach.`
+              : `Only ${kt} kt of crosswind across the entrance — docking should be straightforward.`;
       }
     }
-    items.push({ label: "Docking", note: harbor.notes.docking, impact, severity });
+    items.push({ label: paddle ? "Launch & landing" : "Docking", note: harbor.notes.docking, impact, severity });
   }
 
   // Hazards — how much the sea state is activating the local hazards.
@@ -100,18 +112,37 @@ export function harborIntel(harbor: Harbor, c: Conditions, boat: BoatProfile, sk
   if (hasWind) {
     const strong = gustKt >= boat.windMaxKt * sf;
     const gusty = gustKt - windKt >= 8 || (windKt > 0 && gustKt / windKt >= 1.4);
-    const severity: IntelSeverity = strong ? "alert" : gusty ? "watch" : "ok";
+    const w = Math.round(windKt);
+    const g = Math.round(gustKt);
+    const light = windKt < boat.windCalmKt * sf * 0.5;
+    // For a paddler, an offshore wind is the classic way to get in trouble: the way
+    // out is effortless and the way back is straight upwind. The exposure model
+    // already tells us when the wind is blowing off the land here.
+    const offshore = paddle && !light && exposureForWind(harbor, c.windDir!) < 0.35;
+    const severity: IntelSeverity = strong ? "alert" : gusty || offshore ? "watch" : "ok";
     let impact: string;
-    if (gusty && strong) {
-      impact = `Strong and gusty — ${Math.round(windKt)} kt sustained, gusts to ${Math.round(gustKt)}, past what a ${boat.name} wants. Reef down and sail conservative.`;
+    if (paddle) {
+      if (strong) {
+        impact = `Strong${gusty ? " and gusty" : ""} — ${w} kt sustained, gusts to ${g}, past what a ${boat.name} handles. It will blow you downwind faster than you can paddle back; stay off the water.`;
+      } else if (offshore) {
+        impact = `${dir} ${w} kt is blowing offshore here — an easy paddle out and a hard slog back, and that catches people out. Stay close in and keep the return leg in mind.`;
+      } else if (gusty) {
+        impact = `Gusty — sustained ${w} kt, gusts to ${g}. Puffs will swing the bow and knock you off balance; stay near shore and pick a landmark to hold your line.`;
+      } else if (light) {
+        impact = `Light ${dir} ${w} kt — easy, glassy paddling.`;
+      } else {
+        impact = `Steady ${dir} ${w} kt — manageable. Head out into the wind so the tired leg home is downwind.`;
+      }
+    } else if (gusty && strong) {
+      impact = `Strong and gusty — ${w} kt sustained, gusts to ${g}, past what a ${boat.name} wants. Reef down and sail conservative.`;
     } else if (gusty) {
-      impact = `Gusty — sustained ${Math.round(windKt)} kt, gusts to ${Math.round(gustKt)}. Reef early; the puffs will round you up.`;
+      impact = `Gusty — sustained ${w} kt, gusts to ${g}. Reef early; the puffs will round you up.`;
     } else if (strong) {
-      impact = `Strong, steady ${dir} ${Math.round(windKt)} kt, gusts to ${Math.round(gustKt)} near your limit — a handful; a reef will settle the helm.`;
-    } else if (windKt < boat.windCalmKt * sf * 0.5) {
-      impact = `Light ${dir} ${Math.round(windKt)} kt — ghosting conditions; you may motor more than sail.`;
+      impact = `Strong, steady ${dir} ${w} kt, gusts to ${g} near your limit — a handful; a reef will settle the helm.`;
+    } else if (light) {
+      impact = `Light ${dir} ${w} kt — ghosting conditions; you may motor more than sail.`;
     } else {
-      impact = `Steady ${dir} ${Math.round(windKt)} kt — powered up but predictable for a ${boat.name}.`;
+      impact = `Steady ${dir} ${w} kt — powered up but predictable for a ${boat.name}.`;
     }
     items.push({ label: "Wind & handling", impact, severity });
   }
@@ -140,10 +171,12 @@ export function harborIntel(harbor: Harbor, c: Conditions, boat: BoatProfile, sk
     let impact: string;
     if (t < 60) {
       severity = "alert";
-      impact = `Water is ${Math.round(t)}°F — cold-shock territory. A capsize or MOB gets dangerous within minutes${smallBoat ? " on an open boat like this" : ""}. Dress for immersion and keep the PFD on.`;
+      impact = paddle
+        ? `Water is ${Math.round(t)}°F — cold-shock territory, and on a board or in a kayak you're in it the moment you come off. Dress for immersion, not for the air, and keep the PFD on.`
+        : `Water is ${Math.round(t)}°F — cold-shock territory. A capsize or MOB gets dangerous within minutes${smallBoat ? " on an open boat like this" : ""}. Dress for immersion and keep the PFD on.`;
     } else if (t < 70) {
       severity = smallBoat ? "watch" : "ok";
-      impact = `Water is ${Math.round(t)}°F — chilly. A swim would be a real shock${smallBoat ? "; consider a wetsuit" : ""}.`;
+      impact = `Water is ${Math.round(t)}°F — chilly. A swim would be a real shock${paddle ? "; a wetsuit is worth it if you're likely to go in" : smallBoat ? "; consider a wetsuit" : ""}.`;
     } else {
       severity = "ok";
       impact = `Water is ${Math.round(t)}°F — comfortable if you end up in it.`;

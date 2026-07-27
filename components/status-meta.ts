@@ -1,6 +1,7 @@
 // UI styling for each status. Pure data — safe to import anywhere.
 
 import { Status } from "@/lib/types";
+import { BoatProfile, CraftKind } from "@/lib/boats";
 
 export interface StatusMeta {
   label: string;
@@ -45,6 +46,19 @@ export const STATUS_META: Record<Status, StatusMeta> = {
     bar: "bg-slate-500",
   },
 };
+
+/** Status label for the selected craft. Only the green label changes: it's a call to
+ *  action, and "Go sailing" is wrong on a paddleboard. Yellow/red/unknown read the same
+ *  whatever you're on. Boats without a craft (incl. custom ones) default to sail. */
+const GO_LABEL: Record<CraftKind, string> = {
+  sail: "Go sailing",
+  paddle: "Go kayaking / paddleboarding",
+};
+
+export function statusLabel(status: Status, boat?: BoatProfile): string {
+  if (status === "green") return GO_LABEL[boat?.craft ?? "sail"];
+  return STATUS_META[status].label;
+}
 
 const ORDER: Record<Status, number> = { green: 0, yellow: 1, red: 2, unknown: 3 };
 export function statusRank(s: Status): number {

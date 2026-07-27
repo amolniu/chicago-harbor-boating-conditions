@@ -41,6 +41,43 @@ describe("harborIntel", () => {
     expect(keel.severity).toBe("ok");
   });
 
+  it("never gives a paddler sailing advice (no reef/helm/slip/motor)", () => {
+    const kayak = getBoat("kayak-sup");
+    const jargon = /reef|helm|round you up|ghosting|motor|slip\b|steerage|MOB/i;
+    // Sweep a range of conditions so every wording branch gets exercised.
+    const cases = [
+      cond({ windDir: 45, windKt: 4, gustKt: 5 }), // light
+      cond({ windDir: 45, windKt: 9, gustKt: 11 }), // steady
+      cond({ windDir: 45, windKt: 8, gustKt: 18 }), // gusty
+      cond({ windDir: 45, windKt: 20, gustKt: 26, waveFt: 3 }), // strong
+      cond({ windDir: 225, windKt: 10, gustKt: 12 }), // offshore at Belmont
+      cond({ waterTempF: 52 }), // cold water
+    ];
+    for (const c of cases) {
+      for (const item of harborIntel(belmont, c, kayak, "intermediate")) {
+        expect(item.impact, `"${item.impact}"`).not.toMatch(jargon);
+      }
+    }
+  });
+
+  it("warns a paddler about an offshore wind, but not a keelboat", () => {
+    // SW at Belmont blows off the land — trivial for a sailboat, the classic
+    // way a paddler gets blown out and can't get back.
+    const offshore = cond({ windDir: 225, windKt: 11, gustKt: 13 });
+    const kayak = harborIntel(belmont, offshore, getBoat("kayak-sup"), "intermediate").find((i) => i.label === "Wind & handling")!;
+    const keel = harborIntel(belmont, offshore, getBoat("beneteau40"), "intermediate").find((i) => i.label === "Wind & handling")!;
+    expect(kayak.impact).toMatch(/offshore/i);
+    expect(kayak.severity).toBe("watch");
+    expect(keel.impact).not.toMatch(/offshore/i);
+    expect(keel.severity).toBe("ok");
+  });
+
+  it("relabels docking as launch & landing for a paddler", () => {
+    const items = harborIntel(belmont, cond({}), getBoat("kayak-sup"), "intermediate");
+    expect(items.find((i) => i.label === "Launch & landing")).toBeTruthy();
+    expect(items.find((i) => i.label === "Docking")).toBeUndefined();
+  });
+
   it("wind severity and wording agree when it's strong but steady", () => {
     // gusts exceed the boat's max, but the spread is small (not 'gusty')
     const strongSteady = cond({ windDir: 225, windKt: 24, gustKt: 26, waveFt: 1 });

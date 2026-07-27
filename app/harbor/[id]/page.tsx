@@ -8,7 +8,7 @@ import { Panel } from "@/components/Panel";
 import { ScoreBars } from "@/components/ScoreBars";
 import { WindChart } from "@/components/WindChart";
 import { HourStrip } from "@/components/HourStrip";
-import { STATUS_META } from "@/components/status-meta";
+import { STATUS_META, statusLabel } from "@/components/status-meta";
 import { getHarbor } from "@/lib/harbors";
 import { rate } from "@/lib/rating";
 import { computeWindow } from "@/lib/window";
@@ -95,7 +95,7 @@ export default function HarborDetail() {
           <div className="flex items-center gap-3">
             <span className={`h-4 w-4 rounded-full ${meta.dot}`} />
             <h1 className="text-2xl font-bold tracking-tight">{b.name}</h1>
-            <span className={`text-sm font-semibold ${meta.text}`}>{meta.label}</span>
+            <span className={`text-sm font-semibold ${meta.text}`}>{statusLabel(rating.status, boat)}</span>
           </div>
           <div className="text-right text-xs text-slate-500">
             <div className="font-mono text-2xl text-slate-200">{rating.status === "unknown" ? "—" : rating.score}</div>

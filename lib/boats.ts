@@ -3,6 +3,10 @@
 // warming up. Each profile gives the wind/wave levels where conditions go from
 // green → yellow (`calm`) and yellow → red (`max`). Skill scales those limits.
 
+/** What you're actually on. Drives craft-appropriate copy: a paddler has no reef,
+ *  no helm, and no slip, and cares about being blown offshore. Default "sail". */
+export type CraftKind = "sail" | "paddle";
+
 export interface BoatProfile {
   id: string;
   name: string;
@@ -16,10 +20,12 @@ export interface BoatProfile {
   waveMaxFt: number;
   /** Crosswind (kt) across the entrance that starts to bite when docking. */
   crosswindMaxKt: number;
+  /** Craft type, for craft-appropriate copy + the green call to action. Default "sail". */
+  craft?: CraftKind;
 }
 
 export const BOATS: BoatProfile[] = [
-  { id: "kayak-sup", name: "Kayak / Paddleboard", windCalmKt: 8, windMaxKt: 14, waveCalmFt: 0.7, waveMaxFt: 1.5, crosswindMaxKt: 12 },
+  { id: "kayak-sup", name: "Kayak / Paddleboard", windCalmKt: 8, windMaxKt: 14, waveCalmFt: 0.7, waveMaxFt: 1.5, crosswindMaxKt: 12, craft: "paddle" },
   { id: "daysailer", name: "18 ft Daysailer", windCalmKt: 10, windMaxKt: 18, waveCalmFt: 1.5, waveMaxFt: 3.0, crosswindMaxKt: 15 },
   { id: "hobie", name: "Hobie Cat", windCalmKt: 12, windMaxKt: 22, waveCalmFt: 2.0, waveMaxFt: 4.0, crosswindMaxKt: 20 },
   { id: "j24", name: "J/24", windCalmKt: 12, windMaxKt: 22, waveCalmFt: 2.5, waveMaxFt: 4.5, crosswindMaxKt: 18 },

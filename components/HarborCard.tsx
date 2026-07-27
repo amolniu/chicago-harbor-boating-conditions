@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { Conditions, Rating } from "@/lib/types";
 import { degToCompass } from "@/lib/units";
-import { STATUS_META } from "./status-meta";
+import { BoatProfile } from "@/lib/boats";
+import { STATUS_META, statusLabel } from "./status-meta";
 
 function stat(label: string, value: string) {
   return (
@@ -19,6 +20,7 @@ export function HarborCard({
   name,
   conditions: c,
   rating: r,
+  boat,
   favorite = false,
   onToggleFavorite,
 }: {
@@ -26,6 +28,7 @@ export function HarborCard({
   name: string;
   conditions: Conditions;
   rating: Rating;
+  boat?: BoatProfile;
   favorite?: boolean;
   onToggleFavorite?: () => void;
 }) {
@@ -49,7 +52,7 @@ export function HarborCard({
               <span title="Thunderstorm risk" className="shrink-0">⛈</span>
             )}
           </div>
-          <div className={`mt-0.5 text-xs font-medium ${meta.text}`}>{meta.label}</div>
+          <div className={`mt-0.5 text-xs font-medium ${meta.text}`}>{statusLabel(r.status, boat)}</div>
         </div>
         <div className="flex shrink-0 items-start gap-2">
           <div className="text-right text-xs text-slate-500">
