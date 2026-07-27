@@ -152,6 +152,18 @@ function buildReason(
     return `${c.advisory === "gale" ? "Gale" : "Storm"} warning in effect — stay in.`;
   }
 
+  // A thunderstorm is never a footnote. Normally the copy names the lowest-scoring
+  // factor, but the storm cap is flat (45 elevated / 8 active) while the advisory cap
+  // scales with skill — so a beginner's SCA cap dips BELOW the storm cap and used to
+  // push the storm out of the headline for exactly the sailor least equipped to handle
+  // one. An active or likely storm now leads regardless of which scored lower; the
+  // advisory still gets its mention. ("watch" doesn't cap the score, so it stays in the
+  // intel panel rather than shouting here.)
+  const stormLead = c.storm?.headline ?? "Thunderstorm risk in the area — stay in.";
+  if (c.storm?.level === "active" || c.storm?.level === "elevated") {
+    return c.advisory === "small_craft" ? `${stormLead} Small Craft Advisory is up as well.` : stormLead;
+  }
+
   if (status === "green") {
     const wavePart = c.waveFt != null ? `, ${c.waveFt.toFixed(1)} ft on the lake` : "";
     const scNote =
@@ -162,8 +174,10 @@ function buildReason(
   const scPrefix = c.advisory === "small_craft" && limiter.key !== "advisory" ? "Small Craft Advisory up. " : "";
 
   switch (limiter.key) {
+    // Unreachable while only active/elevated cap the score (both return above), but
+    // kept so a future storm level that caps can't silently fall through to the wind copy.
     case "storm":
-      return c.storm?.headline ?? "Thunderstorm risk in the area — stay in.";
+      return stormLead;
     case "advisory":
       return `Small Craft Advisory in effect — the open lake is above ${SKILL_POSSESSIVE[skill]} comfort, even if it looks manageable at the dock.`;
     case "exitWave":
