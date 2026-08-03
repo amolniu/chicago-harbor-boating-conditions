@@ -297,10 +297,30 @@ export const HARBORS: Harbor[] = [
   // Same western shore, so the base Chicago fetch shape applies (a WEST wind is
   // offshore/calm; NE–E is the onshore wave-maker) — openWaterBearing stays unset.
   // The two southern harbors remain LOT/KLOT (defaults); Kenosha and Winthrop Harbor
-  // cross into Wisconsin waters → MKX office + KMKX radar. Wind comes from CHII2
-  // (south) or the nearest wind buoy 45199 (north), while the wave-only buoys that
-  // sit right offshore (45186/45187) supply OBSERVED waves via waveBuoy. No
-  // representative lakefront cam up here, so all hide the panel.
+  // cross into Wisconsin waters → MKX office + KMKX radar, and Kewaunee further north
+  // is GRB + KGRB. Wind comes from CHII2 (south) or the nearest wind buoy 45199
+  // (north) — except Kewaunee, which has no usable wind buoy and takes the gridpoint
+  // model. The wave-only buoys that sit right offshore (45186/45187) supply OBSERVED
+  // waves via waveBuoy. No representative lakefront cam up here, so all hide the panel.
+  {
+    id: "kewaunee",
+    waveGrid: "GRB/98,30",
+    name: "Kewaunee Marina",
+    lat: 44.4575, lon: -87.4986,
+    entranceBearing: 100,
+    exposureScale: 0.5,
+    exposedDirs: ["NE", "E", "ESE"],
+    windFromGrid: true,
+    marineZone: "LMZ542",
+    discussionOffice: "GRB",
+    radarStation: "KGRB",
+    webcamUrl: "",
+    notes: {
+      entrance: "Behind the Kewaunee pierheads at the river mouth; the east-facing gap takes an onshore sea straight off the open lake.",
+      docking: "Sheltered slips up inside the river once you're through the breakwater gap.",
+      hazards: "River current meets the lake at the pierheads, and a NE blow stacks a steep sea right at the entrance.",
+    },
+  },
   {
     id: "southport",
     waveGrid: "MKX/94,44",
@@ -618,6 +638,26 @@ export const HARBORS: Harbor[] = [
       hazards: "Only a sustained south wind blowing up the length of the bay raises much chop here; mind shoaling near the head.",
     },
   },
+  {
+    id: "sister-bay",
+    waveGrid: "GRB/106,65",
+    name: "Sister Bay Marina",
+    lat: 45.1906, lon: -87.1276,
+    entranceBearing: 270,
+    exposureScale: 0.35,
+    openWaterBearing: 260,
+    exposedDirs: ["W", "WSW", "NW"],
+    windFromGrid: true,
+    marineZone: "LMZ521",
+    discussionOffice: "GRB",
+    radarStation: "KGRB",
+    webcamUrl: "",
+    notes: {
+      entrance: "On the Door Peninsula's bay side, at the head of a west-facing bay — a westerly blows straight up it, while the peninsula shelters everything from the east.",
+      docking: "Compact village marina tucked at the head of the bay; calm in most conditions once you're inside.",
+      hazards: "A hard west or southwest wind puts chop right onto the exposed municipal dock; watch depth toward the shallow head of the bay.",
+    },
+  },
 ];
 
 export function getHarbor(id: string): Harbor | undefined {
@@ -639,9 +679,9 @@ export const REGIONS: { id: RegionId; label: string }[] = [
 
 const REGION_MEMBERS: Record<RegionId, string[]> = {
   chicago: ["montrose", "belmont", "diversey", "dusable", "monroe", "burnham", "31st", "59th", "jackson-inner", "jackson-outer"],
-  "north-shore": ["great-lakes-marina", "waukegan", "north-point", "southport"],
+  "north-shore": ["great-lakes-marina", "waukegan", "north-point", "southport", "kewaunee"],
   "michigan-east": ["new-buffalo", "st-joseph", "south-haven", "grand-haven", "muskegon", "whitehall"],
-  "green-bay": ["menominee", "cedar-river", "escanaba", "fayette", "gladstone"],
+  "green-bay": ["menominee", "cedar-river", "escanaba", "fayette", "gladstone", "sister-bay"],
 };
 
 const REGION_OF: Record<string, RegionId> = Object.fromEntries(
