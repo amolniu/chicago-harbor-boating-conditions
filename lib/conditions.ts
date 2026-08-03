@@ -111,28 +111,38 @@ function assemble(
     ].filter((s): s is string => !!s),
   );
 
-  // Wind: gridpoint model nowcast for buoy-less harbors, else the first buoy in the
-  // chain that reports wind (dir/speed/gust from that same station).
+  // Wind: a real observation always wins. Try the harbor's own buoy (plus the Chicago
+  // neighbours where those apply), and only fall back to the gridpoint model when the
+  // harbor opted in via windFromGrid. That makes windFromGrid a FALLBACK rather than
+  // an override, so a harbor can name an intermittent station (several Green Bay
+  // stations go quiet for days) and still read correctly while it's dark.
+  const windChain = uniq([harbor.buoyStation, ...fallback].filter((s): s is string => !!s));
+  const wind = pickField(buoys, windChain, "windKt");
+  const wb = wind.station ? buoys.get(wind.station) : null;
+
   let windDir: number | null;
   let windKt: number | null;
   let gustKt: number | null;
   let windObservedAt: string | null;
   let windSource: string;
-  if (usesGrid) {
+  if (wind.value != null) {
+    windDir = wb?.windDir ?? null;
+    windKt = wind.value;
+    gustKt = wb?.gustKt ?? null;
+    windObservedAt = wb?.observedAt ?? null;
+    windSource = wind.station ?? harbor.buoyStation ?? "forecast";
+  } else if (usesGrid) {
     windDir = gridCurrent?.windDir ?? null;
     windKt = gridCurrent?.windKt ?? null;
     gustKt = gridCurrent?.gustKt ?? null;
     windObservedAt = null; // a model nowcast, not an observation
     windSource = "NWS model";
   } else {
-    const windChain = uniq([harbor.buoyStation, ...fallback].filter((s): s is string => !!s));
-    const wind = pickField(buoys, windChain, "windKt");
-    const wb = wind.station ? buoys.get(wind.station) : null;
-    windDir = wb?.windDir ?? null;
-    windKt = wind.value;
-    gustKt = wb?.gustKt ?? null;
-    windObservedAt = wb?.observedAt ?? null;
-    windSource = wind.station ?? harbor.buoyStation ?? "forecast";
+    windDir = null;
+    windKt = null;
+    gustKt = null;
+    windObservedAt = null;
+    windSource = harbor.buoyStation ?? "forecast";
   }
 
   // Waves: blend an observed local wave buoy with the per-harbor NWS gridpoint model,

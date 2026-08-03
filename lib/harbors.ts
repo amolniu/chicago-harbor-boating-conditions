@@ -28,9 +28,11 @@ export interface Harbor {
   /** Nearest NDBC station for localized wind/temp. Optional: buoy-less harbors
    *  (windFromGrid) omit it and take live wind from their gridpoint model instead. */
   buoyStation?: string;
-  /** Take live wind (dir/speed/gust) from this harbor's own NWS gridpoint model
-   *  rather than a buoy — for regions with no usable wind buoy (e.g. Green Bay).
-   *  Waves still come from the gridpoint; water temp is left blank (no local obs). */
+  /** FALL BACK to this harbor's own NWS gridpoint model for live wind when no buoy
+   *  reading is available — for regions with no usable wind buoy (e.g. much of Green
+   *  Bay), or where the only nearby station reports intermittently. A fresh
+   *  `buoyStation` reading always wins; the model just fills the gap instead of the
+   *  harbor going dark. Waves still come from the gridpoint. */
   windFromGrid?: boolean;
   /** Optional dedicated wave buoy sitting right off the harbor. When set, its
    *  OBSERVED wave height is blended with the gridpoint model for current conditions,
@@ -310,6 +312,7 @@ export const HARBORS: Harbor[] = [
     entranceBearing: 100,
     exposureScale: 0.5,
     exposedDirs: ["NE", "E", "ESE"],
+    buoyStation: "KWNW3", // Kewaunee MET, right at the harbour (~1 km)
     windFromGrid: true,
     marineZone: "LMZ542",
     discussionOffice: "GRB",
@@ -545,6 +548,7 @@ export const HARBORS: Harbor[] = [
     entranceBearing: 90,
     exposureScale: 0.45,
     exposedDirs: ["NE", "ENE", "E"],
+    buoyStation: "MNMM4", // Menominee, right at the marina (~1.6 km)
     windFromGrid: true,
     marineZone: "LMZ521",
     discussionOffice: "GRB",
@@ -606,6 +610,7 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.15,
     openWaterBearing: 250,
     exposedDirs: ["W", "WSW", "SW"],
+    buoyStation: "FPTM4", // Fairport (~11 km); reports intermittently, model covers the gaps
     windFromGrid: true,
     marineZone: "LMZ221",
     discussionOffice: "MQT",

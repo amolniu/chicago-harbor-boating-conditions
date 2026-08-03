@@ -79,6 +79,20 @@ curl -s "https://www.ndbc.noaa.gov/data/realtime2/45170.txt" | sed -n '1p;3p'
   The same station can be both `buoyStation` and `waveBuoy` if it reports wind **and**
   waves and is the closest option (e.g. South Haven's `45168`).
 
+⚠️ **Use the station id in UPPERCASE.** `realtime2` filenames are uppercase, but the
+station table lists non-numeric ids in lowercase — copy one straight out and you get a
+404 that looks like "this station has no feed". `KWNW3` returns data; `kwnw3` 404s. Six
+Great Lakes stations were written off this way before the case was spotted:
+
+```bash
+for s in KWNW3 MNMM4 SYWW3; do printf "%s " $s; curl -s -o /dev/null -w "%{http_code}\n" \
+  "https://www.ndbc.noaa.gov/data/realtime2/$s.txt"; done
+```
+
+(`lib/ndbc.ts` upper-cases the id, so the config itself is case-insensitive — this only
+bites during research.) There is no alternate endpoint to try: `latest_obs/`, `5day2/`
+and `.spec` are not populated for these stations, so an uppercase 404 is a real gap.
+
 ⚠️ **Verify the station's actual coordinates, not its name.** A station's label can be
 misleading — `45170` is the "Michigan City Buoy" ~78 km from South Haven, so it's a poor
 wind source there despite being easy to find. Confirm the lat/lon and pick the genuinely

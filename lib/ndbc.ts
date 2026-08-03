@@ -90,12 +90,20 @@ async function fetchText(url: string): Promise<string | null> {
   }
 }
 
-/** Latest available reading for a station, filling each field from recent rows. */
+/** A station whose newest row is older than this is treated as dark, not current.
+ *  Stations do go quiet for days while still serving a stale file — reporting that as
+ *  "conditions right now" is worse than having no reading, because callers can fall
+ *  back (a neighbouring buoy, or the gridpoint model via harbor.windFromGrid). */
+const MAX_OBS_AGE_MS = 3 * 3600_000;
+
+/** Latest available reading for a station, filling each field from recent rows.
+ *  Null when the station is unreachable, empty, or stale. */
 export async function getBuoyCurrent(station: string): Promise<BuoyCurrent | null> {
   const text = await fetchText(`https://www.ndbc.noaa.gov/data/realtime2/${station.toUpperCase()}.txt`);
   if (!text) return null;
   const rows = parseRealtime2(text);
   if (!rows.length) return null;
+  if (Date.now() - rows[0].time > MAX_OBS_AGE_MS) return null;
 
   const cutoff = rows[0].time - 2 * 3600_000; // within 2 h of newest
   const recent = rows.filter((r) => r.time >= cutoff);
@@ -124,6 +132,9 @@ export async function getBuoyWindHistory(station: string, hours = 24): Promise<W
   if (!text) return [];
   const rows = parseRealtime2(text);
   if (!rows.length) return [];
+  // Same guard as getBuoyCurrent: a dark station would otherwise plot days-old data
+  // as if it were the last 24 h.
+  if (Date.now() - rows[0].time > MAX_OBS_AGE_MS) return [];
   const cutoff = rows[0].time - hours * 3600_000;
   return rows
     .filter((r) => r.time >= cutoff && r.windKt != null)
