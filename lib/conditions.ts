@@ -9,6 +9,7 @@ import { Conditions, type StormRisk } from "./types";
 import { Harbor, HARBORS } from "./harbors";
 import { BuoyCurrent, getBuoyCurrent } from "./ndbc";
 import { getMarineForecast, getGridCurrent, type GridCurrent } from "./nws";
+import { getGlosCurrent, type GlosCurrent } from "./glos";
 import { getStormOutlook, stormCellKey } from "./storm";
 import { rate } from "./rating";
 import { getBoat, DEFAULT_BOAT_ID, DEFAULT_SKILL } from "./boats";
@@ -94,6 +95,7 @@ function assemble(
   gridCurrent: GridCurrent | null,
   advisory: Conditions["advisory"],
   storm: StormRisk | undefined,
+  glos: GlosCurrent | null = null,
 ): Conditions {
   // The Chicago-neighborhood buoy fallback only fits harbors that lean on those
   // buoys. A harbor with no nearby buoy takes live wind from its own gridpoint model
@@ -149,10 +151,13 @@ function assemble(
   // weighting the observation by how close its buoy is (waveObsWeight). Real
   // observations lead, the model still contributes. Fall back to whichever exists,
   // then to any buoy in the chain. Period/direction come from the observed buoy first.
-  const localWave = harbor.waveBuoy ? buoys.get(harbor.waveBuoy.station) : null;
+  // The observed wave can come from an NDBC buoy or a GLOS platform (used where the
+  // nearest NDBC buoy reports no waves at all); both reduce to the same shape here.
+  const waveSrc = harbor.waveBuoy;
+  const localWave = waveSrc?.station ? buoys.get(waveSrc.station) : waveSrc?.glos ? glos ?? null : null;
   const obsWave = localWave?.waveFt ?? null;
   const modelWave = gridCurrent?.waveFt ?? null;
-  const obsWeight = harbor.waveBuoy ? waveObsWeight(harbor.waveBuoy.km) : 0;
+  const obsWeight = waveSrc ? waveObsWeight(waveSrc.km) : 0;
   let waveFt: number | null;
   let wavePeriodS: number | null;
   let waveDir: number | null;
@@ -183,7 +188,17 @@ function assemble(
     waveFt,
     wavePeriodS,
     waveDir,
-    waterTempF: pickField(buoys, dataChain, "waterTempF").value,
+    // Water temp, nearest source first. The wider dataChain ends in the Chicago
+    // neighbours, so a GLOS platform a few km offshore must be consulted BEFORE it —
+    // otherwise a Michigan harbor whose own buoy has no temp sensor (45161) would
+    // report Lake Michigan's far side, 150 km away.
+    // waveBuoy (NDBC or GLOS) is by definition the closest local source, so it leads;
+    // then the harbor's own station; then the wider chain.
+    waterTempF:
+      (waveSrc?.station ? buoys.get(waveSrc.station)?.waterTempF : null) ??
+      glos?.waterTempF ??
+      (harbor.buoyStation ? buoys.get(harbor.buoyStation)?.waterTempF : null) ??
+      pickField(buoys, dataChain, "waterTempF").value,
     airTempF: pickField(buoys, dataChain, "airTempF").value,
     advisory,
     source: windSource,
@@ -215,18 +230,23 @@ export async function getAllConditions(): Promise<HarborConditions[]> {
   const zones = uniq(HARBORS.map((h) => h.marineZone));
   const grids = uniq(HARBORS.map((h) => h.waveGrid));
 
-  const [buoyEntries, gridEntries, marineEntries, stormEntries] = await Promise.all([
+  // Only the handful of harbors with a GLOS wave source, keyed by platform id.
+  const glosRefs = new Map(HARBORS.filter((h) => h.waveBuoy?.glos).map((h) => [h.waveBuoy!.glos!.datasetId, h.waveBuoy!.glos!]));
+
+  const [buoyEntries, gridEntries, marineEntries, stormEntries, glosEntries] = await Promise.all([
     Promise.all(stations.map(async (s) => [s, await getBuoyCurrent(s)] as const)),
     Promise.all(grids.map(async (g) => [g, await getGridCurrent(g)] as const)),
     Promise.all(zones.map(async (z) => [z, (await getMarineForecast(z)).advisory] as const)),
     Promise.all(
       Array.from(STORM_CELLS, async ([key, p]) => [key, await getStormOutlook(p.lat, p.lon, p.tz)] as const),
     ),
+    Promise.all(Array.from(glosRefs, async ([id, ref]) => [id, await getGlosCurrent(ref)] as const)),
   ]);
   const buoys = new Map(buoyEntries);
   const gridCur = new Map(gridEntries);
   const advisories = new Map(marineEntries);
   const storms = new Map(stormEntries);
+  const glosCur = new Map(glosEntries);
 
   return HARBORS.map((h) => ({
     id: h.id,
@@ -237,6 +257,7 @@ export async function getAllConditions(): Promise<HarborConditions[]> {
       gridCur.get(h.waveGrid) ?? null,
       advisories.get(h.marineZone) ?? "none",
       toStormRisk(storms.get(stormCellKey(h.lat, h.lon)) ?? null),
+      h.waveBuoy?.glos ? glosCur.get(h.waveBuoy.glos.datasetId) ?? null : null,
     ),
   }));
 }
@@ -249,13 +270,15 @@ export async function getHarborConditions(harbor: Harbor): Promise<Conditions> {
     ),
   );
   const cell = stormCellFor(harbor);
-  const [buoyEntries, gridCurrent, marine, stormOutlook] = await Promise.all([
+  const glosRef = harbor.waveBuoy?.glos;
+  const [buoyEntries, gridCurrent, marine, stormOutlook, glos] = await Promise.all([
     Promise.all(stations.map(async (s) => [s, await getBuoyCurrent(s)] as const)),
     getGridCurrent(harbor.waveGrid),
     getMarineForecast(harbor.marineZone),
     getStormOutlook(cell.lat, cell.lon, cell.tz),
+    glosRef ? getGlosCurrent(glosRef) : Promise.resolve(null),
   ]);
-  return assemble(harbor, new Map(buoyEntries), gridCurrent, marine.advisory, toStormRisk(stormOutlook));
+  return assemble(harbor, new Map(buoyEntries), gridCurrent, marine.advisory, toStormRisk(stormOutlook), glos);
 }
 
 /** Persist a snapshot per harbor (baseline status = default sailor). No-op without a DB. */

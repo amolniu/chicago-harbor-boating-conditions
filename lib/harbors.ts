@@ -11,6 +11,8 @@
 // project is to refine them with real sailor input over time.
 
 import { Compass16, COMPASS_16, angleDiff, degToCompass } from "./units";
+// Type-only: erased at compile time, so this file stays isomorphic.
+import type { GlosWaveRef } from "./glos";
 
 export interface Harbor {
   id: string;
@@ -34,13 +36,16 @@ export interface Harbor {
    *  `buoyStation` reading always wins; the model just fills the gap instead of the
    *  harbor going dark. Waves still come from the gridpoint. */
   windFromGrid?: boolean;
-  /** Optional dedicated wave buoy sitting right off the harbor. When set, its
-   *  OBSERVED wave height is blended with the gridpoint model for current conditions,
-   *  weighted by `km` (the buoy's distance from the harbor — closer ⇒ more weight, see
-   *  waveObsWeight). Use when a buoy is nearer than buoyStation for waves; it's often a
-   *  wave-only buoy (e.g. 45186/45187) but may be the same station as buoyStation. The
-   *  NWS gridpoint still drives the wave forecast series. */
-  waveBuoy?: { station: string; km: number };
+  /** Optional dedicated wave source sitting right off the harbor. Its OBSERVED wave
+   *  height is blended with the gridpoint model for current conditions, weighted by
+   *  `km` (distance from the harbor — closer ⇒ more weight, see waveObsWeight). The NWS
+   *  gridpoint still drives the wave FORECAST series.
+   *
+   *  Set exactly one of `station` (an NDBC buoy — often a wave-only one such as
+   *  45186/45187, and it may be the same station as buoyStation) or `glos` (a GLOS
+   *  Seagull platform, for harbors whose nearest NDBC buoy reports no waves at all).
+   *  A GLOS platform can also supply water temperature. */
+  waveBuoy?: { km: number; station?: string; glos?: GlosWaveRef };
   /** NWS nearshore marine zone for forecasts + advisories. */
   marineZone: string;
   /** NWS gridpoint (e.g. "LOT/76,76") for the harbor's offshore point — carries
@@ -494,6 +499,9 @@ export const HARBORS: Harbor[] = [
     openWaterBearing: 285,
     exposedDirs: ["W", "WNW"],
     buoyStation: "45161",
+    // 45161 has no wave or temp sensor, so the Grand Haven Spotter (GLOS) supplies both.
+    // Spotters are seasonal — when it's pulled for winter this falls back to the model.
+    waveBuoy: { km: 8, glos: { datasetId: 671, waveId: 9494, periodId: 9501, dirId: 9495, tempId: 9491 } },
     marineZone: "LMZ847",
     discussionOffice: "GRR",
     radarStation: "KGRR",
@@ -536,6 +544,8 @@ export const HARBORS: Harbor[] = [
     openWaterBearing: 285,
     exposedDirs: ["W", "WNW"],
     buoyStation: "45161",
+    // As at Grand Haven: 45161 carries no waves or temp, so the Whitehall Spotter does.
+    waveBuoy: { km: 12, glos: { datasetId: 672, waveId: 9520, periodId: 9527, dirId: 9521, tempId: 9517 } },
     marineZone: "LMZ848",
     discussionOffice: "GRR",
     radarStation: "KGRR",

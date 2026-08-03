@@ -176,6 +176,34 @@ so it is opt-in and never runs in `npm test`.
 It has already caught two shipped mistakes: `KWNW3` at Kewaunee (0.51×) and `CMTI2` at
 the three south-side Chicago harbors (0.65× — a gauge inside sheltered Calumet Harbor).
 
+## Optional — a GLOS wave source
+
+Some harbors have no NDBC buoy that reports waves at all (45161 serves Grand Haven,
+Muskegon and Whitehall with `WVHT=MM`). Where a Sofar Spotter sits nearby, set
+`waveBuoy.glos` instead of `waveBuoy.station` and it supplies observed waves, period,
+direction and water temperature into the same distance-weighted blend.
+
+**Only ever use GLOS for waves/temp, never for wind.** Its closest platforms to our
+harbors are often shore `tower`s: the Chicago park towers sit 0.2–4 km out and read
+~12 kt below the offshore buoys. Filter to `platform_type == "moored_buoy"`.
+
+`/obs` returns opaque `parameter_id`s with no names and no units, and the id→name map is
+~3.4 MB, so resolve the ids **once** and store them in the harbor config:
+
+```bash
+# 1. find the platform (moored_buoy, has wind/waves) near your harbor
+curl -s "https://seagull-api.glos.org/api/v1/obs-datasets.geojson" > /tmp/glos.json
+# 2. see which parameter_ids that platform is currently serving
+curl -s "https://seagull-api.glos.org/api/v1/obs?obsDatasetId=671&startDate=$(date -u +%F)"
+# 3. resolve those ids to names (grep the big map)
+curl -s "https://seagull-api.glos.org/api/v1/parameters" > /tmp/params.json
+```
+
+Units are **null** for every parameter; CF names imply SI and the values confirm it —
+metres for wave height and **Kelvin** for water temperature. Pick the shallowest
+`depth` for temperature. Spotters are **seasonal**: they go dark each winter, so the
+blend must (and does) fall back to the gridpoint model.
+
 ## Known limitations to generalize when scaling further
 
 - **Wind-history graph** uses only the harbor's own buoy; a good fallback would be
