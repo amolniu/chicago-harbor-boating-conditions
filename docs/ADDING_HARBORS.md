@@ -161,6 +161,21 @@ Nothing needs doing for the **thunderstorm outlook**: harbors are grouped into ~
 storm cells automatically (`stormCellKey`), and each cell is queried once at the centroid
 of its harbors, so a new harbor lands in the right cell (or opens its own) with no config.
 
+## Step 6 — validate the station you chose
+
+```bash
+npm run validate:stations
+```
+
+Compares each harbor's configured wind source against the nearest live GLOS **moored
+buoy** over 24 h and fails if anything reads below 0.7× — the direction that makes
+conditions look safer than they are. It is asymmetric on purpose: reading high is merely
+conservative (expected when the reference buoy is further offshore). It hits the network,
+so it is opt-in and never runs in `npm test`.
+
+It has already caught two shipped mistakes: `KWNW3` at Kewaunee (0.51×) and `CMTI2` at
+the three south-side Chicago harbors (0.65× — a gauge inside sheltered Calumet Harbor).
+
 ## Known limitations to generalize when scaling further
 
 - **Wind-history graph** uses only the harbor's own buoy; a good fallback would be
