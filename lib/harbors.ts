@@ -254,7 +254,10 @@ export const HARBORS: Harbor[] = [
     lat: 41.7876, lon: -87.5757,
     entranceBearing: 90,
     exposureScale: 0.55,
-    buoyStation: "CMTI2",
+    // NOT CMTI2: that gauge sits inside sheltered Calumet Harbor and averaged 0.65x the
+    // Chicago Buoy over 24 h (`npm run validate:stations`). Under-reading makes conditions
+    // look safer than they are, so use the open-lake buoy the neighbouring harbors use.
+    buoyStation: "45198",
     marineZone: "LMZ742",
     notes: {
       entrance: "Jackson Park inner harbor; moderate shelter behind the outer works.",
@@ -270,7 +273,10 @@ export const HARBORS: Harbor[] = [
     entranceBearing: 70,
     exposureScale: 0.5,
     shelteredDirs: ["S", "SSW", "SW", "WSW", "W"],
-    buoyStation: "CMTI2",
+    // NOT CMTI2: that gauge sits inside sheltered Calumet Harbor and averaged 0.65x the
+    // Chicago Buoy over 24 h (`npm run validate:stations`). Under-reading makes conditions
+    // look safer than they are, so use the open-lake buoy the neighbouring harbors use.
+    buoyStation: "45198",
     marineZone: "LMZ742",
     notes: {
       entrance: "Reached through the outer harbor; the inner basin is well protected.",
@@ -286,7 +292,10 @@ export const HARBORS: Harbor[] = [
     entranceBearing: 80,
     exposureScale: 0.85,
     exposedDirs: ["NE", "ENE", "E", "SE"],
-    buoyStation: "CMTI2",
+    // NOT CMTI2: that gauge sits inside sheltered Calumet Harbor and averaged 0.65x the
+    // Chicago Buoy over 24 h (`npm run validate:stations`). Under-reading makes conditions
+    // look safer than they are, so use the open-lake buoy the neighbouring harbors use.
+    buoyStation: "45198",
     marineZone: "LMZ742",
     notes: {
       entrance: "The most exposed of the Jackson Park basins — open to the east and northeast.",
@@ -301,8 +310,9 @@ export const HARBORS: Harbor[] = [
   // The two southern harbors remain LOT/KLOT (defaults); Kenosha and Winthrop Harbor
   // cross into Wisconsin waters → MKX office + KMKX radar, and Kewaunee further north
   // is GRB + KGRB. Wind comes from CHII2 (south) or the nearest wind buoy 45199
-  // (north) — except Kewaunee, which has no usable wind buoy and takes the gridpoint
-  // model. The wave-only buoys that sit right offshore (45186/45187) supply OBSERVED
+  // (north) — except Kewaunee, whose only nearby station is too sheltered to trust
+  // (see below), so it takes the gridpoint model. The wave-only buoys offshore
+  // (45186/45187) supply OBSERVED
   // waves via waveBuoy. No representative lakefront cam up here, so all hide the panel.
   {
     id: "kewaunee",
@@ -312,7 +322,11 @@ export const HARBORS: Harbor[] = [
     entranceBearing: 100,
     exposureScale: 0.5,
     exposedDirs: ["NE", "E", "ESE"],
-    buoyStation: "KWNW3", // Kewaunee MET, right at the harbour (~1 km)
+    // Deliberately NO buoyStation. KWNW3 sits ~1 km away and is tempting, but it's a
+    // pier-mounted tide-gauge MET sensor in the lee of the breakwater: over 24 h it
+    // averaged 5.3 kt against 10.3 kt at the buoy 13 km offshore (ratio 0.51, peaks
+    // 9.9 vs 19.4). Half the true wind is the dangerous direction for a go/no-go call,
+    // so the gridpoint model — which tracks the offshore buoy closely here — wins.
     windFromGrid: true,
     marineZone: "LMZ542",
     discussionOffice: "GRB",

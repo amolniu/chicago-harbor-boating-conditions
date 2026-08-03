@@ -93,6 +93,26 @@ for s in KWNW3 MNMM4 SYWW3; do printf "%s " $s; curl -s -o /dev/null -w "%{http_
 bites during research.) There is no alternate endpoint to try: `latest_obs/`, `5day2/`
 and `.spec` are not populated for these stations, so an uppercase 404 is a real gap.
 
+⚠️ **Validate a station against a neighbour over ~24 h before trusting it — proximity
+is not accuracy.** A sheltered station reads LOW, which makes conditions look safer than
+they are. Measured ratios (station ÷ offshore buoy, 24 h means):
+
+| Station | Ratio | Verdict |
+|---|---|---|
+| `KWNW3` Kewaunee (pier tide-gauge) | **0.51** | rejected — half the true wind |
+| `MNMM4` Menominee (same class!) | 0.97 | fine, in use |
+| `SVNM4` South Haven (C-MAN light) | 1.09 | fine — an earlier spot-check wrongly condemned it |
+
+So this is **site-specific, not station-class**, and a single instantaneous sample
+misleads in *both* directions. Compare the 24 h means before wiring a station:
+
+```bash
+curl -s "https://www.ndbc.noaa.gov/data/realtime2/KWNW3.txt" | awk 'NR>2 && $7!="MM"{s+=$7;n++} END{print "mean m/s:",s/n," n:",n}'
+```
+
+The same trap applies to any land/shore sensor: GLOS's Chicago park "tower" platforms
+sit 0.2–4 km from the harbors and read ~12 kt below the offshore buoys.
+
 ⚠️ **Verify the station's actual coordinates, not its name.** A station's label can be
 misleading — `45170` is the "Michigan City Buoy" ~78 km from South Haven, so it's a poor
 wind source there despite being easy to find. Confirm the lat/lon and pick the genuinely
