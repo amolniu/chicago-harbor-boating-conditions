@@ -46,7 +46,7 @@ export default function AlertsPage() {
   }
 
   if (loading || !user || !prefs) {
-    return <div className="grid min-h-[40vh] place-items-center text-slate-400">Loading your alert…</div>;
+    return <div className="grid min-h-[40vh] place-items-center text-muted">Loading your alert…</div>;
   }
 
   const toggleHarbor = (id: string) =>
@@ -65,9 +65,9 @@ export default function AlertsPage() {
       <div className="flex items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Your alert</h1>
-          <p className="text-sm text-slate-400">Signed in as {prefs.email}</p>
+          <p className="text-sm text-muted">Signed in as {prefs.email}</p>
         </div>
-        <Link href="/" className="text-sm text-slate-400 hover:text-slate-200">← Board</Link>
+        <Link href="/" className="text-sm text-muted hover:text-fg">← Board</Link>
       </div>
 
       {/* Watched harbors */}
@@ -80,7 +80,7 @@ export default function AlertsPage() {
                 key={h.id}
                 onClick={() => toggleHarbor(h.id)}
                 className={`rounded-full border px-3 py-1.5 text-sm transition ${
-                  on ? "border-sky-400 bg-sky-500/20 text-sky-100" : "border-white/10 bg-slate-900 text-slate-400 hover:text-slate-200"
+                  on ? "border-brand bg-brand/20 text-brand-on" : "border-line bg-raised text-muted hover:text-fg"
                 }`}
               >
                 {h.name}
@@ -96,7 +96,7 @@ export default function AlertsPage() {
           <select
             value={prefs.boatId}
             onChange={(e) => patch({ boatId: e.target.value })}
-            className="rounded-md border border-white/10 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-400"
+            className="rounded-md border border-line bg-raised px-2 py-1.5 text-sm text-strong outline-none focus:border-brand"
           >
             {BOATS.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             {customBoats.length > 0 && (
@@ -105,12 +105,12 @@ export default function AlertsPage() {
               </optgroup>
             )}
           </select>
-          <div className="flex overflow-hidden rounded-md border border-white/10">
+          <div className="flex overflow-hidden rounded-md border border-line">
             {SKILLS.map((s) => (
               <button
                 key={s.id}
                 onClick={() => patch({ skill: s.id as Skill })}
-                className={`px-3 py-1.5 text-xs ${prefs.skill === s.id ? "bg-sky-500 text-white" : "bg-slate-900 text-slate-400 hover:text-slate-200"}`}
+                className={`px-3 py-1.5 text-xs ${prefs.skill === s.id ? "bg-brand text-brand-on" : "bg-raised text-muted hover:text-fg"}`}
               >
                 {s.name}
               </button>
@@ -125,14 +125,14 @@ export default function AlertsPage() {
           <input
             type="checkbox" checked={prefs.rules.notifyWhenGreen}
             onChange={(e) => patchRule({ notifyWhenGreen: e.target.checked })}
-            className="h-4 w-4 accent-sky-500"
+            className="h-4 w-4 accent-brand"
           />
-          A watched harbor turns <b className="text-emerald-300">green</b> for my boat
+          A watched harbor turns <b className="text-good-fg">green</b> for my boat
         </label>
 
         <div className="mt-4">
-          <div className="text-sm font-medium text-slate-300">Wind coming from</div>
-          <p className="mb-2 text-xs text-slate-500">Only alert when the wind is from one of these directions. None selected = any direction.</p>
+          <div className="text-sm font-medium text-fg">Wind coming from</div>
+          <p className="mb-2 text-xs text-faint">Only alert when the wind is from one of these directions. None selected = any direction.</p>
           <div className="grid grid-cols-8 gap-1.5">
             {COMPASS_16.map((d) => {
               const on = dirs.includes(d);
@@ -141,7 +141,7 @@ export default function AlertsPage() {
                   key={d}
                   onClick={() => toggleDir(d)}
                   className={`rounded border px-1 py-1.5 text-xs transition ${
-                    on ? "border-sky-400 bg-sky-500/20 text-sky-100" : "border-white/10 bg-slate-900 text-slate-400 hover:text-slate-200"
+                    on ? "border-brand bg-brand/20 text-brand-on" : "border-line bg-raised text-muted hover:text-fg"
                   }`}
                 >
                   {d}
@@ -165,7 +165,7 @@ export default function AlertsPage() {
             <input
               type="checkbox" checked={prefs.channels.email}
               onChange={(e) => patch({ channels: { ...prefs.channels, email: e.target.checked } })}
-              className="h-4 w-4 accent-sky-500"
+              className="h-4 w-4 accent-brand"
             />
             Email
           </label>
@@ -173,7 +173,7 @@ export default function AlertsPage() {
             <input
               type="checkbox" checked={prefs.channels.push}
               onChange={(e) => patch({ channels: { ...prefs.channels, push: e.target.checked } })}
-              className="h-4 w-4 accent-sky-500"
+              className="h-4 w-4 accent-brand"
             />
             Browser push
           </label>
@@ -183,11 +183,11 @@ export default function AlertsPage() {
       <div className="mt-6 flex items-center gap-3">
         <button
           onClick={save} disabled={saving}
-          className="rounded-lg bg-sky-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-400 disabled:opacity-50"
+          className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-brand-on hover:bg-brand-hover disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save alert"}
         </button>
-        {saved && <span className="text-sm text-emerald-300">Saved ✓</span>}
+        {saved && <span className="text-sm text-good-fg">Saved ✓</span>}
       </div>
     </div>
   );
@@ -195,9 +195,9 @@ export default function AlertsPage() {
 
 function Section({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">{title}</h2>
-      {hint && <p className="mb-3 mt-0.5 text-xs text-slate-500">{hint}</p>}
+    <section className="mt-6 rounded-2xl border border-line bg-surface p-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">{title}</h2>
+      {hint && <p className="mb-3 mt-0.5 text-xs text-faint">{hint}</p>}
       {children}
     </section>
   );
@@ -210,15 +210,15 @@ function NumField({
 }) {
   return (
     <label className="block">
-      <span className="text-xs text-slate-400">{label}</span>
+      <span className="text-xs text-muted">{label}</span>
       <div className="mt-1 flex items-center gap-1.5">
         <input
           type="number" min={0} inputMode="decimal" placeholder="any"
           value={value ?? ""}
           onChange={(e) => onChange(e.target.value === "" ? null : Number(e.target.value))}
-          className="w-full rounded-md border border-white/10 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-400"
+          className="w-full rounded-md border border-line bg-raised px-2 py-1.5 text-sm text-strong outline-none focus:border-brand"
         />
-        <span className="text-xs text-slate-500">{unit}</span>
+        <span className="text-xs text-faint">{unit}</span>
       </div>
     </label>
   );

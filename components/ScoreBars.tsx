@@ -15,13 +15,13 @@ function Bar({ label, score, hint }: { label: string; score: number; hint: strin
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between text-xs">
-        <span className="font-medium text-slate-300">{label}</span>
+        <span className="font-medium text-fg">{label}</span>
         <span className={meta.text}>{score}</span>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+      <div className="h-2 overflow-hidden rounded-full bg-raised">
         <div className={`h-full rounded-full ${meta.bar}`} style={{ width: `${Math.max(3, score)}%` }} />
       </div>
-      <div className="mt-1 text-[11px] text-slate-500">{hint}</div>
+      <div className="mt-1 text-[11px] text-faint">{hint}</div>
     </div>
   );
 }

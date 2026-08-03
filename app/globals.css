@@ -1,7 +1,119 @@
 @import "tailwindcss";
 
+/* Class-based dark mode. The <html> element carries `.dark`, set before first paint
+   by the inline script in app/layout.tsx so there's no flash. LIGHT IS THE DEFAULT:
+   we deliberately don't follow prefers-color-scheme, so a dark-OS visitor still lands
+   on the light theme until they choose otherwise. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------------------
+   Semantic tokens — the whole app styles against these, never raw slate/white,
+   so re-theming (or tuning either theme) is a change to this file alone.
+
+   surface   panel / card background        line       hairline border
+   raised    inputs, chips, raised chrome   line-soft  fainter divider
+   fg        body text                      muted      secondary text
+   strong    headings / emphasis            faint      tertiary text
+   sunken    inset wells (code, readouts)   header     sticky bar (translucent)
+
+   good/warn/bad/idle mirror the green/yellow/red/no-data statuses, and brand is
+   the sky accent. Each has a solid value (dots, bars, buttons) and a `-fg` text
+   value, because readable status TEXT is much darker on light than on dark.
+   --------------------------------------------------------------------------- */
+@theme inline {
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-sunken: var(--sunken);
+  --color-header: var(--header);
+  --color-fg: var(--fg);
+  --color-strong: var(--strong);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+
+  --color-good: var(--good);
+  --color-good-fg: var(--good-fg);
+  --color-warn: var(--warn);
+  --color-warn-fg: var(--warn-fg);
+  --color-bad: var(--bad);
+  --color-bad-fg: var(--bad-fg);
+  --color-idle: var(--idle);
+  --color-idle-fg: var(--idle-fg);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-fg: var(--brand-fg);
+  --color-brand-on: var(--brand-on);
+}
+
+/* Light (default) — the same design language as the dark theme in a light key:
+   a cool blue-tinted ground, white cards, navy text. */
 :root {
+  color-scheme: light;
+
+  --surface: #ffffff;
+  --raised: #f1f5f9;
+  --sunken: #f1f5f9;
+  --header: rgba(255, 255, 255, 0.75);
+  --fg: #1e2c40;
+  --strong: #0b1729;
+  --muted: #55647a;
+  --faint: #5b6878; /* tertiary text is used at text-xs, so it still needs ~4.5:1 */
+  --line: rgba(15, 28, 46, 0.12);
+  --line-soft: rgba(15, 28, 46, 0.07);
+
+  --good: #059669;
+  --good-fg: #047857;
+  --warn: #d97706;
+  --warn-fg: #b45309;
+  --bad: #e11d48;
+  --bad-fg: #be123c;
+  --idle: #94a3b8;
+  --idle-fg: #64748b;
+
+  --brand: #0369a1; /* deep enough that white button text clears AA (5.4:1) */
+  --brand-hover: #075985; /* darkens on hover against a light page */
+  --brand-fg: #0369a1;
+  --brand-on: #ffffff;
+
+  --page-bg: #eef3f9;
+  --glow-a: rgba(56, 130, 200, 0.16);
+  --glow-b: rgba(20, 120, 160, 0.12);
+}
+
+/* Dark — the original palette, unchanged. */
+.dark {
   color-scheme: dark;
+
+  --surface: rgba(255, 255, 255, 0.03);
+  --raised: #0f172a;
+  --sunken: rgba(0, 0, 0, 0.3);
+  --header: rgba(2, 6, 23, 0.7);
+  --fg: #cbd5e1;
+  --strong: #f1f5f9;
+  --muted: #94a3b8;
+  --faint: #64748b;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-soft: rgba(255, 255, 255, 0.05);
+
+  --good: #34d399;
+  --good-fg: #6ee7b7;
+  --warn: #fbbf24;
+  --warn-fg: #fcd34d;
+  --bad: #f43f5e;
+  --bad-fg: #fda4af;
+  --idle: #64748b;
+  --idle-fg: #94a3b8;
+
+  --brand: #38bdf8;
+  --brand-hover: #7dd3fc; /* brightens on hover against a dark page */
+  --brand-fg: #bae6fd;
+  --brand-on: #082f49; /* dark text reads best on the bright cyan fill */
+
+  --page-bg: #060c17;
+  --glow-a: rgba(56, 130, 200, 0.18);
+  --glow-b: rgba(20, 90, 120, 0.16);
 }
 
 html,
@@ -11,10 +123,11 @@ body {
 
 body {
   background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(56, 130, 200, 0.18), transparent 60%),
-    radial-gradient(900px 500px at -10% 10%, rgba(20, 90, 120, 0.16), transparent 55%),
-    #060c17;
-  color: #e6eef7;
+    radial-gradient(1200px 600px at 80% -10%, var(--glow-a), transparent 60%),
+    radial-gradient(900px 500px at -10% 10%, var(--glow-b), transparent 55%),
+    var(--page-bg);
+  background-attachment: fixed;
+  color: var(--fg);
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -24,6 +137,6 @@ body {
   width: 8px;
 }
 .scroll-thin::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.35);
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
   border-radius: 999px;
 }

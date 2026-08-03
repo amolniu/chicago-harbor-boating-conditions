@@ -11,7 +11,7 @@ const TZ = "America/Chicago";
 export function WindChart({ data }: { data: Point[] }) {
   const pts = data.filter((d) => d.windKt != null);
   if (pts.length < 2) {
-    return <div className="grid h-40 place-items-center text-sm text-slate-500">No recent wind observations.</div>;
+    return <div className="grid h-40 place-items-center text-sm text-faint">No recent wind observations.</div>;
   }
 
   const W = 640;

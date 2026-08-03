@@ -41,9 +41,9 @@ const ADVISORY_LABEL: Record<string, string> = {
 };
 
 const SEV: Record<IntelSeverity, { dot: string; label: string; text: string }> = {
-  ok: { dot: "bg-emerald-400", label: "Clear", text: "text-emerald-300" },
-  watch: { dot: "bg-amber-400", label: "Watch", text: "text-amber-300" },
-  alert: { dot: "bg-rose-500", label: "Caution", text: "text-rose-300" },
+  ok: { dot: "bg-good", label: "Clear", text: "text-good-fg" },
+  watch: { dot: "bg-warn", label: "Watch", text: "text-warn-fg" },
+  alert: { dot: "bg-bad", label: "Caution", text: "text-bad-fg" },
 };
 
 export default function HarborDetail() {
@@ -87,7 +87,7 @@ export default function HarborDetail() {
 
   return (
     <div>
-      <Link href="/" className="text-sm text-slate-400 hover:text-slate-200">← All harbors</Link>
+      <Link href="/" className="text-sm text-muted hover:text-fg">← All harbors</Link>
 
       {/* Header */}
       <div className={`mt-3 rounded-2xl border ${meta.border} ${meta.soft} p-5`}>
@@ -97,8 +97,8 @@ export default function HarborDetail() {
             <h1 className="text-2xl font-bold tracking-tight">{b.name}</h1>
             <span className={`text-sm font-semibold ${meta.text}`}>{statusLabel(rating.status, boat)}</span>
           </div>
-          <div className="text-right text-xs text-slate-500">
-            <div className="font-mono text-2xl text-slate-200">{rating.status === "unknown" ? "—" : rating.score}</div>
+          <div className="text-right text-xs text-faint">
+            <div className="font-mono text-2xl text-fg">{rating.status === "unknown" ? "—" : rating.score}</div>
             <div>
               {c.source}
               {harbor.buoyStation && c.source !== harbor.buoyStation ? " (nearby)" : ""} ·{" "}
@@ -106,10 +106,10 @@ export default function HarborDetail() {
             </div>
           </div>
         </div>
-        <p className="mt-3 text-slate-200">{rating.reason}</p>
+        <p className="mt-3 text-fg">{rating.reason}</p>
         <div className="mt-3 flex flex-col items-start gap-2">
           {c.advisory !== "none" && (
-            <div className="inline-flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-200">
+            <div className="inline-flex items-center gap-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-1.5 text-sm text-warn-fg">
               ⚠ {ADVISORY_LABEL[c.advisory]} in effect{b.marine.headline ? ` — ${b.marine.headline}` : ""}
             </div>
           )}
@@ -117,8 +117,8 @@ export default function HarborDetail() {
             <div
               className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${
                 c.storm.level === "watch"
-                  ? "border-amber-500/40 bg-amber-500/10 text-amber-200"
-                  : "border-rose-500/40 bg-rose-500/10 text-rose-200"
+                  ? "border-warn/40 bg-warn/10 text-warn-fg"
+                  : "border-bad/40 bg-bad/10 text-bad-fg"
               }`}
             >
               ⛈ {c.storm.headline}
@@ -131,17 +131,17 @@ export default function HarborDetail() {
         {/* Launch score */}
         <Panel title="Launch score — exit vs open lake" className="lg:col-span-2">
           <ScoreBars exitScore={rating.exitScore} openScore={rating.openScore} />
-          <p className="mt-3 text-xs text-slate-500">
-            Limiting factor right now: <b className="text-slate-300">{rating.limiter}</b>. Harbor exit reflects{" "}
+          <p className="mt-3 text-xs text-faint">
+            Limiting factor right now: <b className="text-fg">{rating.limiter}</b>. Harbor exit reflects{" "}
             {harbor.name}&apos;s breakwater geometry for the current wind; open lake is offshore comfort.
           </p>
         </Panel>
 
         {/* Recommended sail window */}
         <Panel title="Recommended sail window" className="lg:col-span-2">
-          <p className="mb-3 text-lg font-medium text-slate-100">{sail.summary}</p>
+          <p className="mb-3 text-lg font-medium text-strong">{sail.summary}</p>
           <HourStrip hours={sail.hours} />
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-2 text-xs text-faint">
             Next 24 h, rated for your boat + skill. Dim cells are after dark. Wave heights in the forecast are
             wind-sea estimates.
           </p>
@@ -153,19 +153,19 @@ export default function HarborDetail() {
             {intel.map((it) => {
               const s = SEV[it.severity];
               return (
-                <div key={it.label} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+                <div key={it.label} className="rounded-lg border border-line-soft bg-surface p-3">
                   <div className="flex items-center gap-2">
                     <span className={`h-2 w-2 shrink-0 rounded-full ${s.dot}`} />
-                    <span className="text-sm font-semibold text-slate-200">{it.label}</span>
+                    <span className="text-sm font-semibold text-fg">{it.label}</span>
                     <span className={`ml-auto text-[10px] font-medium uppercase tracking-wide ${s.text}`}>{s.label}</span>
                   </div>
-                  <p className="mt-1.5 text-sm text-slate-200">{it.impact}</p>
-                  {it.note && <p className="mt-1 text-xs text-slate-500">{it.note}</p>}
+                  <p className="mt-1.5 text-sm text-fg">{it.impact}</p>
+                  {it.note && <p className="mt-1 text-xs text-faint">{it.note}</p>}
                 </div>
               );
             })}
           </div>
-          <p className="mt-3 text-[11px] text-slate-500">
+          <p className="mt-3 text-[11px] text-faint">
             Live reads combine the current conditions with {harbor.name}&apos;s exposure model, rated for your boat +
             skill. The grey local notes are seed knowledge, refined over time with sailor input.
           </p>
@@ -174,9 +174,9 @@ export default function HarborDetail() {
         {/* Live wind */}
         <Panel title="Live wind — last 24 h">
           <WindChart data={b.windHistory} />
-          <div className="mt-2 flex gap-4 text-xs text-slate-400">
-            <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 bg-sky-400" /> sustained</span>
-            <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t border-dashed border-sky-400/60" /> gust</span>
+          <div className="mt-2 flex gap-4 text-xs text-muted">
+            <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 bg-brand" /> sustained</span>
+            <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t border-dashed border-brand/60" /> gust</span>
           </div>
         </Panel>
 
@@ -196,10 +196,10 @@ export default function HarborDetail() {
 
         {/* Wave forecast */}
         <Panel title="Wave & marine forecast">
-          <p className="text-slate-200">{b.marine.waveText ?? "No nearshore wave line available."}</p>
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="text-fg">{b.marine.waveText ?? "No nearshore wave line available."}</p>
+          <p className="mt-2 text-xs text-faint">
             Zone {harbor.marineZone} · advisory:{" "}
-            <b className="text-slate-300">{c.advisory === "none" ? "none" : ADVISORY_LABEL[c.advisory]}</b>
+            <b className="text-fg">{c.advisory === "none" ? "none" : ADVISORY_LABEL[c.advisory]}</b>
           </p>
         </Panel>
 
@@ -209,7 +209,7 @@ export default function HarborDetail() {
           <img
             src={`https://radar.weather.gov/ridge/standard/${b.radarStation}_loop.gif?t=${bust}`}
             alt={`NWS ${b.radarStation} radar loop`}
-            className="w-full rounded-lg border border-white/10"
+            className="w-full rounded-lg border border-line"
           />
         </Panel>
 
@@ -220,9 +220,9 @@ export default function HarborDetail() {
             <img
               src={`${b.webcamUrl}?t=${bust}`}
               alt="GLERL lakefront webcam"
-              className="w-full rounded-lg border border-white/10"
+              className="w-full rounded-lg border border-line"
             />
-            <p className="mt-2 text-[11px] text-slate-500">NOAA GLERL camera — nearest public lakefront view.</p>
+            <p className="mt-2 text-[11px] text-faint">NOAA GLERL camera — nearest public lakefront view.</p>
           </Panel>
         )}
 
@@ -230,16 +230,16 @@ export default function HarborDetail() {
         <Panel title="NOAA forecast discussion" className="lg:col-span-2">
           {b.discussion ? (
             <details>
-              <summary className="cursor-pointer text-sm text-sky-400">
+              <summary className="cursor-pointer text-sm text-brand">
                 Read the LOT Area Forecast Discussion
                 {b.discussion.issued ? ` (issued ${fmtLocalTime(new Date(b.discussion.issued))})` : ""}
               </summary>
-              <pre className="scroll-thin mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-slate-300">
+              <pre className="scroll-thin mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-sunken p-3 text-xs leading-relaxed text-fg">
                 {b.discussion.text}
               </pre>
             </details>
           ) : (
-            <p className="text-sm text-slate-500">Discussion unavailable right now.</p>
+            <p className="text-sm text-faint">Discussion unavailable right now.</p>
           )}
         </Panel>
       </div>
@@ -250,8 +250,8 @@ export default function HarborDetail() {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-[11px] uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="font-medium text-slate-200">{value}</dd>
+      <dt className="text-[11px] uppercase tracking-wide text-faint">{label}</dt>
+      <dd className="font-medium text-fg">{value}</dd>
     </div>
   );
 }
@@ -259,11 +259,11 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Loading({ name }: { name: string }) {
   return (
     <div>
-      <Link href="/" className="text-sm text-slate-400 hover:text-slate-200">← All harbors</Link>
+      <Link href="/" className="text-sm text-muted hover:text-fg">← All harbors</Link>
       <h1 className="mt-3 text-2xl font-bold">{name}</h1>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-40 animate-pulse rounded-2xl border border-white/10 bg-white/[0.03]" />
+          <div key={i} className="h-40 animate-pulse rounded-2xl border border-line bg-surface" />
         ))}
       </div>
     </div>
@@ -271,9 +271,9 @@ function Loading({ name }: { name: string }) {
 }
 
 function NotFound() {
-  return <Message>Harbor not found. <Link href="/" className="text-sky-400">Back to the board</Link>.</Message>;
+  return <Message>Harbor not found. <Link href="/" className="text-brand">Back to the board</Link>.</Message>;
 }
 
 function Message({ children }: { children: React.ReactNode }) {
-  return <div className="rounded-xl border border-white/10 bg-white/[0.03] p-6 text-slate-300">{children}</div>;
+  return <div className="rounded-xl border border-line bg-surface p-6 text-fg">{children}</div>;
 }

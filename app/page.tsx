@@ -104,15 +104,15 @@ export default function Board() {
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Harbor status right now</h1>
-          <p className="text-sm text-slate-400">
-            Rated for a <b className="text-slate-200">{boat.name}</b> · {skill} sailor
+          <p className="text-sm text-muted">
+            Rated for a <b className="text-fg">{boat.name}</b> · {skill} sailor
           </p>
         </div>
-        <div className="flex items-center gap-3 text-xs text-slate-500">
+        <div className="flex items-center gap-3 text-xs text-faint">
           {data && <span>updated {relative(data.updatedAt, now)}</span>}
           <button
             onClick={load}
-            className="rounded-md border border-white/10 bg-slate-900 px-3 py-1.5 text-slate-300 hover:text-white"
+            className="rounded-md border border-line bg-raised px-3 py-1.5 text-fg hover:text-strong"
           >
             Refresh
           </button>
@@ -136,12 +136,12 @@ export default function Board() {
                 onClick={() => setFilter(chip.key)}
                 className={`shrink-0 rounded-full border px-3 py-1.5 text-sm transition ${
                   active
-                    ? "border-sky-400/50 bg-sky-500/15 text-sky-200"
-                    : "border-white/10 bg-slate-900 text-slate-400 hover:text-slate-200"
+                    ? "border-brand/50 bg-brand/15 text-brand-fg"
+                    : "border-line bg-raised text-muted hover:text-fg"
                 }`}
               >
                 {chip.label}
-                <span className="ml-1.5 font-mono text-xs text-slate-500">{counts[chip.key] ?? 0}</span>
+                <span className="ml-1.5 font-mono text-xs text-faint">{counts[chip.key] ?? 0}</span>
               </button>
             );
           })}
@@ -150,24 +150,24 @@ export default function Board() {
 
       {/* Best harbor right now */}
       {filtered.length > 0 && (
-        <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          <div className="text-xs uppercase tracking-wide text-slate-500">Best harbor right now</div>
+        <div className="mb-6 rounded-2xl border border-line bg-surface p-4">
+          <div className="text-xs uppercase tracking-wide text-faint">Best harbor right now</div>
           {best.length ? (
             <div className="mt-2 flex flex-wrap gap-2">
               {best.map((h) => (
                 <Link
                   key={h.id}
                   href={`/harbor/${h.id}`}
-                  className="flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-200 hover:bg-emerald-500/20"
+                  className="flex items-center gap-2 rounded-full border border-good/40 bg-good/10 px-3 py-1.5 text-sm text-good-fg hover:bg-good/20"
                 >
-                  <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                  <span className="h-2 w-2 rounded-full bg-good" />
                   {h.name}
-                  <span className="font-mono text-emerald-300/70">{h.rating.score}</span>
+                  <span className="font-mono text-good-fg/70">{h.rating.score}</span>
                 </Link>
               ))}
             </div>
           ) : (
-            <p className="mt-1 text-sm text-slate-300">
+            <p className="mt-1 text-sm text-fg">
               Nothing is fully green for a {boat.name} right now — {filtered[0].name} is the closest ({filtered[0].rating.score}).
             </p>
           )}
@@ -176,13 +176,13 @@ export default function Board() {
 
       {loading && !data && <SkeletonGrid />}
       {error && (
-        <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-200">
+        <div className="rounded-xl border border-bad/40 bg-bad/10 p-4 text-sm text-bad-fg">
           Couldn&apos;t load live conditions. NOAA/NDBC may be briefly unavailable — try Refresh.
         </div>
       )}
 
       {data && !loading && filter === "favorites" && filtered.length === 0 && (
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-6 text-center text-sm text-slate-400">
+        <div className="rounded-xl border border-line bg-surface p-6 text-center text-sm text-muted">
           No favorites yet — tap the ☆ on any harbor to pin it here.
         </div>
       )}
@@ -203,7 +203,7 @@ export default function Board() {
       </div>
 
       {ranked.length > 0 && (
-        <div className="mt-6 flex flex-wrap gap-4 text-xs text-slate-500">
+        <div className="mt-6 flex flex-wrap gap-4 text-xs text-faint">
           {(["green", "yellow", "red"] as const).map((s) => (
             <span key={s} className="flex items-center gap-1.5">
               <span className={`h-2.5 w-2.5 rounded-full ${STATUS_META[s].dot}`} />
@@ -220,7 +220,7 @@ function SkeletonGrid() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="h-44 animate-pulse rounded-2xl border border-white/10 bg-white/[0.03]" />
+        <div key={i} className="h-44 animate-pulse rounded-2xl border border-line bg-surface" />
       ))}
     </div>
   );

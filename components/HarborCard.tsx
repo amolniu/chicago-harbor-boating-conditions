@@ -9,8 +9,8 @@ import { STATUS_META, statusLabel } from "./status-meta";
 function stat(label: string, value: string) {
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="text-sm font-medium text-slate-200">{value}</div>
+      <div className="text-[11px] uppercase tracking-wide text-faint">{label}</div>
+      <div className="text-sm font-medium text-fg">{value}</div>
     </div>
   );
 }
@@ -47,7 +47,7 @@ export function HarborCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} />
-            <h3 className="truncate font-semibold text-slate-100">{name}</h3>
+            <h3 className="truncate font-semibold text-strong">{name}</h3>
             {(c.storm?.level === "active" || c.storm?.level === "elevated") && (
               <span title="Thunderstorm risk" className="shrink-0">⛈</span>
             )}
@@ -55,8 +55,8 @@ export function HarborCard({
           <div className={`mt-0.5 text-xs font-medium ${meta.text}`}>{statusLabel(r.status, boat)}</div>
         </div>
         <div className="flex shrink-0 items-start gap-2">
-          <div className="text-right text-xs text-slate-500">
-            <div className="font-mono text-lg leading-none text-slate-300">{r.status === "unknown" ? "—" : r.score}</div>
+          <div className="text-right text-xs text-faint">
+            <div className="font-mono text-lg leading-none text-fg">{r.status === "unknown" ? "—" : r.score}</div>
             <div>score</div>
           </div>
           {onToggleFavorite && (
@@ -70,13 +70,13 @@ export function HarborCard({
                 e.stopPropagation();
                 onToggleFavorite();
               }}
-              className="-mr-1 -mt-1 rounded-md p-1 text-slate-500 transition hover:text-amber-300"
+              className="-mr-1 -mt-1 rounded-md p-1 text-faint transition hover:text-warn-fg"
             >
               <svg
                 viewBox="0 0 20 20"
                 strokeWidth="1.5"
                 strokeLinejoin="round"
-                className={`h-[18px] w-[18px] ${favorite ? "fill-amber-400 stroke-amber-400" : "fill-none stroke-current"}`}
+                className={`h-[18px] w-[18px] ${favorite ? "fill-warn stroke-warn" : "fill-none stroke-current"}`}
               >
                 <path d="M10 1.8l2.47 5.01 5.53.8-4 3.9.94 5.5L10 14.4l-4.94 2.6.94-5.5-4-3.9 5.53-.8L10 1.8z" />
               </svg>
@@ -85,23 +85,23 @@ export function HarborCard({
         </div>
       </div>
 
-      <p className="mt-3 line-clamp-3 min-h-[3.5rem] text-sm text-slate-300">{r.reason}</p>
+      <p className="mt-3 line-clamp-3 min-h-[3.5rem] text-sm text-fg">{r.reason}</p>
 
-      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/5 pt-3">
+      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-line-soft pt-3">
         {stat("Wind", wind)}
         {stat("Waves", c.waveFt != null ? `${c.waveFt.toFixed(1)} ft` : "—")}
         {stat("Water", c.waterTempF != null ? `${Math.round(c.waterTempF)}°F` : "—")}
       </div>
 
       {r.status !== "unknown" && (
-        <div className="mt-3 flex items-center gap-3 text-[11px] text-slate-500">
+        <div className="mt-3 flex items-center gap-3 text-[11px] text-faint">
           <span className="flex items-center gap-1">
-            exit <b className="font-mono text-slate-300">{r.exitScore}</b>
+            exit <b className="font-mono text-fg">{r.exitScore}</b>
           </span>
           <span className="flex items-center gap-1">
-            open <b className="font-mono text-slate-300">{r.openScore}</b>
+            open <b className="font-mono text-fg">{r.openScore}</b>
           </span>
-          <span className="ml-auto text-sky-400 opacity-0 transition group-hover:opacity-100">details →</span>
+          <span className="ml-auto text-brand opacity-0 transition group-hover:opacity-100">details →</span>
         </div>
       )}
     </Link>

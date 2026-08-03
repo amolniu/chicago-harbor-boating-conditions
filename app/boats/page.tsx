@@ -55,7 +55,7 @@ export default function BoatsPage() {
   }, [loading, user, router]);
 
   if (loading || !user) {
-    return <div className="grid min-h-[40vh] place-items-center text-slate-400">Loading…</div>;
+    return <div className="grid min-h-[40vh] place-items-center text-muted">Loading…</div>;
   }
   const uid = user.uid;
 
@@ -84,15 +84,15 @@ export default function BoatsPage() {
       <div className="flex items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">My boats</h1>
-          <p className="text-sm text-slate-400">Add your boat and its scores show up across the app.</p>
+          <p className="text-sm text-muted">Add your boat and its scores show up across the app.</p>
         </div>
-        <Link href="/" className="text-sm text-slate-400 hover:text-slate-200">← Board</Link>
+        <Link href="/" className="text-sm text-muted hover:text-fg">← Board</Link>
       </div>
 
       {/* Existing boats */}
       <div className="mt-5 space-y-3">
         {customBoats.length === 0 && !editing && (
-          <p className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">
+          <p className="rounded-xl border border-line bg-surface p-4 text-sm text-muted">
             No custom boats yet. Add one below — start typing a model name for suggestions.
           </p>
         )}
@@ -101,20 +101,20 @@ export default function BoatsPage() {
           const csf = computeCSF(b);
           const avs = estimateAVS(b);
           return (
-            <div key={b.id} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <div key={b.id} className="rounded-xl border border-line bg-surface p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <div className="font-semibold text-slate-100">{b.name}</div>
-                  <div className="mt-0.5 text-xs text-slate-400">
+                  <div className="font-semibold text-strong">{b.name}</div>
+                  <div className="mt-0.5 text-xs text-muted">
                     Cat {b.category} · CSF {csf ? csf.toFixed(2) : "—"} · AVS {avs ? `${Math.round(avs)}°` : "—"}
                   </div>
-                  <div className="mt-1 text-sm text-slate-300">
+                  <div className="mt-1 text-sm text-fg">
                     Comfortable to <b>{p.windCalmKt} kt</b>, max <b>{p.windMaxKt} kt</b>; waves to <b>{p.waveMaxFt} ft</b>
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-2 text-sm">
-                  <button onClick={() => setEditing(specToForm(b))} className="text-sky-400 hover:underline">Edit</button>
-                  <button onClick={() => remove(b.id)} disabled={busy} className="text-rose-400 hover:underline disabled:opacity-50">Delete</button>
+                  <button onClick={() => setEditing(specToForm(b))} className="text-brand hover:underline">Edit</button>
+                  <button onClick={() => remove(b.id)} disabled={busy} className="text-bad-fg hover:underline disabled:opacity-50">Delete</button>
                 </div>
               </div>
             </div>
@@ -127,7 +127,7 @@ export default function BoatsPage() {
       ) : (
         <button
           onClick={() => setEditing(blankForm())}
-          className="mt-4 rounded-lg bg-sky-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-400"
+          className="mt-4 rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-brand-on hover:bg-brand-hover"
         >
           + Add a boat
         </button>
@@ -162,31 +162,31 @@ function BoatForm({
   const p = deriveBoatProfile(spec);
 
   return (
-    <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+    <div className="mt-4 rounded-2xl border border-line bg-surface p-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
         {form.id ? "Edit boat" : "Add a boat"}
       </h2>
 
       {/* Name with typeahead */}
       <div className="relative mt-3">
-        <label className="text-xs text-slate-400">Boat name</label>
+        <label className="text-xs text-muted">Boat name</label>
         <input
           value={form.name}
           onChange={(e) => { set({ name: e.target.value }); setShowSuggest(true); }}
           onFocus={() => setShowSuggest(true)}
           placeholder="Start typing, e.g. Catalina 30"
-          className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400"
+          className="mt-1 w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm text-strong outline-none focus:border-brand"
         />
         {suggestions.length > 0 && (
-          <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-white/10 bg-slate-900 shadow-lg">
+          <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-line bg-raised shadow-lg">
             {suggestions.map((b) => (
               <li key={b.name}>
                 <button
                   type="button" onClick={() => pick(b)}
-                  className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-slate-200 hover:bg-white/10"
+                  className="flex w-full items-center justify-between px-3 py-2 text-left text-sm text-fg hover:bg-raised"
                 >
                   <span>{b.name}</span>
-                  <span className="text-xs text-slate-500">Cat {b.category} · {b.loaFt}′</span>
+                  <span className="text-xs text-faint">Cat {b.category} · {b.loaFt}′</span>
                 </button>
               </li>
             ))}
@@ -196,17 +196,17 @@ function BoatForm({
 
       {/* Category */}
       <div className="mt-3">
-        <label className="text-xs text-slate-400">ISO 12217 design category</label>
+        <label className="text-xs text-muted">ISO 12217 design category</label>
         <select
           value={form.category}
           onChange={(e) => set({ category: e.target.value as BoatCategory })}
-          className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-slate-100 outline-none focus:border-sky-400"
+          className="mt-1 w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm text-strong outline-none focus:border-brand"
         >
           {(["A", "B", "C", "D"] as BoatCategory[]).map((c) => (
             <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
           ))}
         </select>
-        <p className="mt-1 text-xs text-slate-500">Sets the base wind/wave limits. Dimensions below refine the score.</p>
+        <p className="mt-1 text-xs text-faint">Sets the base wind/wave limits. Dimensions below refine the score.</p>
       </div>
 
       {/* Optional dimensions */}
@@ -220,12 +220,12 @@ function BoatForm({
       </div>
 
       {/* Live derived preview */}
-      <div className="mt-4 rounded-lg border border-sky-500/30 bg-sky-500/10 p-3 text-sm text-sky-100">
-        <div className="text-xs uppercase tracking-wide text-sky-300/80">Derived rating</div>
+      <div className="mt-4 rounded-lg border border-brand/30 bg-brand/10 p-3 text-sm text-brand-on">
+        <div className="text-xs uppercase tracking-wide text-brand/80">Derived rating</div>
         <div className="mt-1">
           Category {form.category} · CSF {csf ? csf.toFixed(2) : "—"} · AVS {avs ? `${Math.round(avs)}°` : "—"} (est.)
         </div>
-        <div className="mt-0.5 text-sky-200/90">
+        <div className="mt-0.5 text-brand-fg/90">
           Comfortable to {p.windCalmKt} kt, max {p.windMaxKt} kt · waves to {p.waveMaxFt} ft
         </div>
       </div>
@@ -234,11 +234,11 @@ function BoatForm({
         <button
           onClick={() => onSave(form)}
           disabled={busy || form.name.trim() === ""}
-          className="rounded-lg bg-sky-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-400 disabled:opacity-50"
+          className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-brand-on hover:bg-brand-hover disabled:opacity-50"
         >
           {busy ? "Saving…" : form.id ? "Save changes" : "Add boat"}
         </button>
-        <button onClick={onCancel} className="text-sm text-slate-400 hover:text-slate-200">Cancel</button>
+        <button onClick={onCancel} className="text-sm text-muted hover:text-fg">Cancel</button>
       </div>
     </div>
   );
@@ -247,11 +247,11 @@ function BoatForm({
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <label className="block">
-      <span className="text-xs text-slate-400">{label}</span>
+      <span className="text-xs text-muted">{label}</span>
       <input
         type="number" min={0} inputMode="decimal" value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-md border border-white/10 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-sky-400"
+        className="mt-1 w-full rounded-md border border-line bg-raised px-2 py-1.5 text-sm text-strong outline-none focus:border-brand"
       />
     </label>
   );
