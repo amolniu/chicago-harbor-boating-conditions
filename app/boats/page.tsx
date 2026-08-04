@@ -10,6 +10,7 @@ import {
   BoatCategory, BoatSpec, CATEGORY_LABEL, computeCSF, deriveBoatProfile, estimateAVS,
 } from "@/lib/boatSpecs";
 import { CatalogBoat, searchCatalog } from "@/lib/boatCatalog";
+import { RECALL_URL, recallSearchUrl } from "@/lib/recalls";
 
 interface FormState {
   id: string | null;
@@ -92,9 +93,16 @@ export default function BoatsPage() {
       {/* Existing boats */}
       <div className="mt-5 space-y-3">
         {customBoats.length === 0 && !editing && (
-          <p className="rounded-xl border border-line bg-surface p-4 text-sm text-muted">
-            No custom boats yet. Add one below — start typing a model name for suggestions.
-          </p>
+          <div className="rounded-xl border border-line bg-surface p-4 text-sm text-muted">
+            <p>No custom boats yet. Add one below — start typing a model name for suggestions.</p>
+            <p className="mt-2">
+              Already have a boat?{" "}
+              <a href={RECALL_URL} target="_blank" rel="noopener noreferrer" className="text-brand hover:underline">
+                Check it for recalls
+              </a>{" "}
+              on our sister site.
+            </p>
+          </div>
         )}
         {customBoats.map((b) => {
           const p = deriveBoatProfile(b);
@@ -132,7 +140,39 @@ export default function BoatsPage() {
           + Add a boat
         </button>
       )}
+
+      {customBoats.length > 0 && <RecallCheck boats={customBoats} />}
     </div>
+  );
+}
+
+/** Cross-link to the recall site. Kept to one placement, framed as a boat-safety check
+ *  — this page already derives seaworthiness numbers, so it fits that job rather than
+ *  reading as an ad. Says whose site it is rather than burying it.
+ *
+ *  One link per saved boat, each carrying that boat's name into the site's search, so
+ *  the sailor lands on results for their own boat instead of a search box. */
+function RecallCheck({ boats }: { boats: BoatSpec[] }) {
+  return (
+    <section className="mt-6 rounded-xl border border-line bg-surface p-4">
+      <h2 className="font-semibold text-strong">Check your boat for recalls</h2>
+      <p className="mt-1 text-sm text-fg">
+        Search the USCG database by manufacturer or model on Recall Monitor, our sister site.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {boats.map((b) => (
+          <a
+            key={b.id}
+            href={recallSearchUrl(b.name)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-full border border-line bg-raised px-3 py-1.5 text-sm text-fg hover:text-strong"
+          >
+            {b.name || "Your boat"} ↗
+          </a>
+        ))}
+      </div>
+    </section>
   );
 }
 
