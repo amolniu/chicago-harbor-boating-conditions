@@ -7,6 +7,7 @@ import { Conditions } from "./types";
 import { Harbor, exposureForWind, crosswindKt } from "./harbors";
 import { BoatProfile, Skill, skillFactor } from "./boats";
 import { degToCompass } from "./units";
+import { recallSearchUrl } from "./recalls";
 
 export type IntelSeverity = "ok" | "watch" | "alert";
 
@@ -17,6 +18,8 @@ export interface IntelItem {
   /** Static local knowledge (present for the harbor's base facets). */
   note?: string;
   severity: IntelSeverity;
+  /** Optional follow-up action for this read, rendered as a link on the detail page. */
+  link?: { href: string; text: string };
 }
 
 const NO_WIND = "No live wind reading — see the local note below.";
@@ -181,7 +184,12 @@ export function harborIntel(harbor: Harbor, c: Conditions, boat: BoatProfile, sk
       severity = "ok";
       impact = `Water is ${Math.round(t)}°F — comfortable if you end up in it.`;
     }
-    items.push({ label: "Cold water & safety", impact, severity });
+    // A recall on the thing you're relying on to float is worth knowing about, so offer
+    // the check where this read already leans on a PFD. Only while the water is cold
+    // enough for immersion to matter — on warm water it would just be clutter.
+    const link =
+      t < 70 ? { href: recallSearchUrl("life jacket"), text: "Check life jacket recalls" } : undefined;
+    items.push({ label: "Cold water & safety", impact, severity, link });
   }
 
   // Storm & squalls — HRRR convective outlook (regional).

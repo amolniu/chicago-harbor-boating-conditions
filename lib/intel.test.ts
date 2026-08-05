@@ -78,6 +78,19 @@ describe("harborIntel", () => {
     expect(items.find((i) => i.label === "Docking")).toBeUndefined();
   });
 
+  it("offers the life-jacket recall check only while the water is cold", () => {
+    const cold = harborIntel(belmont, cond({ waterTempF: 52 }), catalina, "intermediate")
+      .find((i) => i.label === "Cold water & safety")!;
+    const chilly = harborIntel(belmont, cond({ waterTempF: 66 }), catalina, "intermediate")
+      .find((i) => i.label === "Cold water & safety")!;
+    const warm = harborIntel(belmont, cond({ waterTempF: 76 }), catalina, "intermediate")
+      .find((i) => i.label === "Cold water & safety")!;
+    expect(cold.link?.href).toMatch(/recall-monitor/);
+    expect(cold.link?.href).toMatch(/q=life(\+|%20)jacket/);
+    expect(chilly.link).toBeTruthy();
+    expect(warm.link, "warm water shouldn't carry a PFD recall prompt").toBeUndefined();
+  });
+
   it("wind severity and wording agree when it's strong but steady", () => {
     // gusts exceed the boat's max, but the spread is small (not 'gusty')
     const strongSteady = cond({ windDir: 225, windKt: 24, gustKt: 26, waveFt: 1 });

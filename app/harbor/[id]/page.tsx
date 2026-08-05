@@ -161,6 +161,16 @@ export default function HarborDetail() {
                   </div>
                   <p className="mt-1.5 text-sm text-fg">{it.impact}</p>
                   {it.note && <p className="mt-1 text-xs text-faint">{it.note}</p>}
+                  {it.link && (
+                    <a
+                      href={it.link.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1.5 inline-block text-xs text-brand hover:underline"
+                    >
+                      {it.link.text} ↗
+                    </a>
+                  )}
                 </div>
               );
             })}
