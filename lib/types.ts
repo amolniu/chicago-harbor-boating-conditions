@@ -1,5 +1,7 @@
 // Shared domain types used across the data layer, rules engine, and UI.
 
+import type { WeatherAlert } from "./alerts";
+
 export type Status = "green" | "yellow" | "red" | "unknown";
 
 /** Canonical, unit-normalized conditions at a harbor at one moment in time. */
@@ -28,6 +30,10 @@ export interface Conditions {
   observedAt: string | null;
   /** Regional HRRR thunderstorm/convective outlook (same across nearby harbors). */
   storm?: StormRisk;
+  /** Active NWS watches/warnings covering this harbor, most constraining first.
+   *  Separate from `advisory` (marine zone products) and `storm` (HRRR model): only
+   *  this carries things like a Tornado Warning. */
+  alerts?: WeatherAlert[];
 }
 
 export type Advisory = "none" | "small_craft" | "gale" | "storm";

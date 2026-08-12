@@ -10,6 +10,7 @@ import { Harbor, HARBORS } from "./harbors";
 import { BuoyCurrent, getBuoyCurrent } from "./ndbc";
 import { getMarineForecast, getGridCurrent, type GridCurrent } from "./nws";
 import { getGlosCurrent, type GlosCurrent } from "./glos";
+import { getActiveAlerts, type WeatherAlert } from "./alerts";
 import { getStormOutlook, stormCellKey } from "./storm";
 import { rate } from "./rating";
 import { getBoat, DEFAULT_BOAT_ID, DEFAULT_SKILL } from "./boats";
@@ -96,6 +97,7 @@ function assemble(
   advisory: Conditions["advisory"],
   storm: StormRisk | undefined,
   glos: GlosCurrent | null = null,
+  alerts: WeatherAlert[] = [],
 ): Conditions {
   // The Chicago-neighborhood buoy fallback only fits harbors that lean on those
   // buoys. A harbor with no nearby buoy takes live wind from its own gridpoint model
@@ -204,6 +206,7 @@ function assemble(
     source: windSource,
     observedAt: windObservedAt,
     storm,
+    alerts,
   };
 }
 
@@ -233,7 +236,7 @@ export async function getAllConditions(): Promise<HarborConditions[]> {
   // Only the handful of harbors with a GLOS wave source, keyed by platform id.
   const glosRefs = new Map(HARBORS.filter((h) => h.waveBuoy?.glos).map((h) => [h.waveBuoy!.glos!.datasetId, h.waveBuoy!.glos!]));
 
-  const [buoyEntries, gridEntries, marineEntries, stormEntries, glosEntries] = await Promise.all([
+  const [buoyEntries, gridEntries, marineEntries, stormEntries, glosEntries, alertEntries] = await Promise.all([
     Promise.all(stations.map(async (s) => [s, await getBuoyCurrent(s)] as const)),
     Promise.all(grids.map(async (g) => [g, await getGridCurrent(g)] as const)),
     Promise.all(zones.map(async (z) => [z, (await getMarineForecast(z)).advisory] as const)),
@@ -241,12 +244,16 @@ export async function getAllConditions(): Promise<HarborConditions[]> {
       Array.from(STORM_CELLS, async ([key, p]) => [key, await getStormOutlook(p.lat, p.lon, p.tz)] as const),
     ),
     Promise.all(Array.from(glosRefs, async ([id, ref]) => [id, await getGlosCurrent(ref)] as const)),
+    // Per harbor, not per storm cell: warning polygons are small, so a cell centroid
+    // would both miss real warnings and invent ones that don't cover the harbor.
+    Promise.all(HARBORS.map(async (h) => [h.id, await getActiveAlerts(h.lat, h.lon)] as const)),
   ]);
   const buoys = new Map(buoyEntries);
   const gridCur = new Map(gridEntries);
   const advisories = new Map(marineEntries);
   const storms = new Map(stormEntries);
   const glosCur = new Map(glosEntries);
+  const alerts = new Map(alertEntries);
 
   return HARBORS.map((h) => ({
     id: h.id,
@@ -258,6 +265,7 @@ export async function getAllConditions(): Promise<HarborConditions[]> {
       advisories.get(h.marineZone) ?? "none",
       toStormRisk(storms.get(stormCellKey(h.lat, h.lon)) ?? null),
       h.waveBuoy?.glos ? glosCur.get(h.waveBuoy.glos.datasetId) ?? null : null,
+      alerts.get(h.id) ?? [],
     ),
   }));
 }
@@ -271,14 +279,15 @@ export async function getHarborConditions(harbor: Harbor): Promise<Conditions> {
   );
   const cell = stormCellFor(harbor);
   const glosRef = harbor.waveBuoy?.glos;
-  const [buoyEntries, gridCurrent, marine, stormOutlook, glos] = await Promise.all([
+  const [buoyEntries, gridCurrent, marine, stormOutlook, glos, alerts] = await Promise.all([
     Promise.all(stations.map(async (s) => [s, await getBuoyCurrent(s)] as const)),
     getGridCurrent(harbor.waveGrid),
     getMarineForecast(harbor.marineZone),
     getStormOutlook(cell.lat, cell.lon, cell.tz),
     glosRef ? getGlosCurrent(glosRef) : Promise.resolve(null),
+    getActiveAlerts(harbor.lat, harbor.lon),
   ]);
-  return assemble(harbor, new Map(buoyEntries), gridCurrent, marine.advisory, toStormRisk(stormOutlook), glos);
+  return assemble(harbor, new Map(buoyEntries), gridCurrent, marine.advisory, toStormRisk(stormOutlook), glos, alerts);
 }
 
 /** Persist a snapshot per harbor (baseline status = default sailor). No-op without a DB. */

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { rate } from "./rating";
 import { getHarbor, HARBORS } from "./harbors";
 import { getBoat } from "./boats";
+import { classifyAlert } from "./alerts";
 import { Conditions } from "./types";
 
 function cond(p: Partial<Conditions>): Conditions {
@@ -147,6 +148,56 @@ describe("a thunderstorm always leads the copy", () => {
     const withoutStorm = rate(belmont, noStormFields as Conditions, catalina, "beginner");
     expect(withStorm.score).toBeLessThanOrEqual(withoutStorm.score);
     expect(withStorm.status).toBe("red");
+  });
+});
+
+// The gap this closed: the app knew weather only through the HRRR model and the marine
+// zone text. Neither carries a Tornado Warning, so one could be active beside the harbor
+// while the score sat green.
+describe("an NWS warning is an absolute stop", () => {
+  const warned = (event: string, extra: Partial<Conditions> = {}) =>
+    cond({
+      windDir: 90, windKt: 4, gustKt: 5, waveFt: 0.3, // otherwise a perfect day
+      alerts: [{ event, headline: "Take shelter now.", level: classifyAlert(event), ends: null }],
+      ...extra,
+    });
+
+  it("pins the score to zero on flat calm water, for every boat and skill", () => {
+    for (const boat of ["kayak-sup", "catalina30", "beneteau40"]) {
+      for (const skill of ["beginner", "intermediate", "advanced"] as const) {
+        const r = rate(burnham, warned("Tornado Warning"), getBoat(boat), skill);
+        expect(r.score, `${boat}/${skill}`).toBe(0);
+        expect(r.status, `${boat}/${skill}`).toBe("red");
+      }
+    }
+  });
+
+  it("outranks a calm forecast in the copy", () => {
+    const r = rate(burnham, warned("Tornado Warning"), catalina, "intermediate");
+    expect(r.reason).toMatch(/tornado warning/i);
+    expect(r.reason).toMatch(/do not go out/i);
+  });
+
+  it("also stops for a severe thunderstorm or special marine warning", () => {
+    for (const e of ["Severe Thunderstorm Warning", "Special Marine Warning"]) {
+      expect(rate(burnham, warned(e), getBoat("beneteau40"), "advanced").score, e).toBe(0);
+    }
+  });
+
+  it("a watch cautions without stopping, and an advisory does neither", () => {
+    const watch = rate(burnham, warned("Tornado Watch"), catalina, "intermediate");
+    expect(watch.score).toBeGreaterThan(0);
+    expect(watch.score).toBeLessThan(60);
+    // A heat advisory has nothing to do with being on the water.
+    expect(rate(burnham, warned("Heat Advisory"), catalina, "intermediate").score).toBeGreaterThan(60);
+  });
+
+  it("beats the storm model, which previously capped at 8 rather than 0", () => {
+    const both = warned("Tornado Warning", {
+      storm: { level: "active", headline: "Thunderstorms in the area now.", capeNow: 2000 },
+    });
+    expect(rate(burnham, both, catalina, "intermediate").score).toBe(0);
+    expect(rate(burnham, both, catalina, "intermediate").reason).toMatch(/tornado/i);
   });
 });
 

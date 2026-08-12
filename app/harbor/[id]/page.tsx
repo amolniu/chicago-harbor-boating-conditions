@@ -108,6 +108,25 @@ export default function HarborDetail() {
         </div>
         <p className="mt-3 text-fg">{rating.reason}</p>
         <div className="mt-3 flex flex-col items-start gap-2">
+          {/* NWS warnings lead: they outrank the marine advisory and the model outlook. */}
+          {(c.alerts ?? []).map((a) => (
+            <div
+              key={a.event + (a.ends ?? "")}
+              className={`inline-flex items-start gap-2 rounded-lg border px-3 py-1.5 text-sm ${
+                a.level === "stop"
+                  ? "border-bad bg-bad/15 font-semibold text-bad-fg"
+                  : a.level === "watch"
+                    ? "border-warn/40 bg-warn/10 text-warn-fg"
+                    : "border-line bg-raised text-muted"
+              }`}
+            >
+              <span aria-hidden="true">{a.level === "stop" ? "⛔" : a.level === "watch" ? "⚠" : "ℹ"}</span>
+              <span>
+                {a.event}
+                {a.headline ? ` — ${a.headline}` : ""}
+              </span>
+            </div>
+          ))}
           {c.advisory !== "none" && (
             <div className="inline-flex items-center gap-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-1.5 text-sm text-warn-fg">
               ⚠ {ADVISORY_LABEL[c.advisory]} in effect{b.marine.headline ? ` — ${b.marine.headline}` : ""}

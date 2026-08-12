@@ -48,6 +48,9 @@ export function HarborCard({
           <div className="flex items-center gap-2">
             <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${meta.dot}`} />
             <h3 className="truncate font-semibold text-strong">{name}</h3>
+            {c.alerts?.some((a) => a.level === "stop") && (
+              <span title={c.alerts.find((a) => a.level === "stop")!.event} className="shrink-0">⛔</span>
+            )}
             {(c.storm?.level === "active" || c.storm?.level === "elevated") && (
               <span title="Thunderstorm risk" className="shrink-0">⛈</span>
             )}

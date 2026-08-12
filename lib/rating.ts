@@ -10,6 +10,7 @@ import { Advisory, Conditions, Rating, Status, StormRisk } from "./types";
 import { Harbor, exposureForWind, crosswindKt } from "./harbors";
 import { BoatProfile, Skill, skillFactor } from "./boats";
 import { degToCompass } from "./units";
+import { worstAlertLevel, type AlertLevel } from "./alerts";
 
 /** 100 when value ≤ calm, 0 when value ≥ max, linear in between. */
 function scoreMetric(value: number, calm: number, max: number): number {
@@ -50,6 +51,15 @@ function advisoryCap(advisory: Advisory, skill: Skill, shelter: number): number 
 
 function advisoryLabel(advisory: Advisory): string {
   return advisory === "gale" ? "gale warning" : advisory === "storm" ? "storm warning" : "small-craft advisory";
+}
+
+// An NWS warning outranks every model and every comfort calculation. A Tornado or
+// Severe Thunderstorm Warning means the authorities have said this is dangerous NOW, so
+// it pins the score at zero rather than merely capping it low — there is no boat and no
+// skill level for which it is a judgement call. A watch caps at the same level as an
+// "elevated" convective outlook.
+function alertCap(level: AlertLevel): number {
+  return level === "stop" ? 0 : level === "watch" ? 45 : 100;
 }
 
 // HRRR convective outlook caps the score: an active thunderstorm is a hard no-go;
@@ -113,6 +123,12 @@ export function rate(
   const sCap = stormCap(c.storm?.level);
   if (sCap < 100) open.push({ key: "storm", label: "storm risk", score: sCap });
 
+  const alertLevel = worstAlertLevel(c.alerts);
+  const aCap = alertCap(alertLevel);
+  if (aCap < 100) {
+    open.push({ key: "alert", label: c.alerts?.[0]?.event.toLowerCase() ?? "weather warning", score: aCap });
+  }
+
   const openScore = Math.min(...open.map((m) => m.score));
   const exitScore = Math.min(...exit.map((m) => m.score));
   const overall = Math.min(openScore, exitScore);
@@ -147,6 +163,14 @@ function buildReason(
 ): string {
   const dir = c.windDir != null ? degToCompass(c.windDir) : "";
   const wind = `${Math.round(c.windKt ?? 0)} kt`;
+
+  // An active NWS warning leads everything else. Nothing below this — not a gale, not
+  // the convective model — is more urgent than "the weather service has issued a
+  // warning covering this harbor right now".
+  const stopAlert = c.alerts?.find((a) => a.level === "stop");
+  if (stopAlert) {
+    return `${stopAlert.event} in effect — do not go out. ${stopAlert.headline ?? "Get off the water and take shelter."}`;
+  }
 
   if (c.advisory === "gale" || c.advisory === "storm") {
     return `${c.advisory === "gale" ? "Gale" : "Storm"} warning in effect — stay in.`;
