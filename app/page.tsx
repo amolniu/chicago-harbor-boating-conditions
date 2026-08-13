@@ -7,6 +7,7 @@ import { HarborCard } from "@/components/HarborCard";
 import { STATUS_META, statusLabel, statusRank } from "@/components/status-meta";
 import { getHarbor, REGIONS, regionOf, type RegionId } from "@/lib/harbors";
 import { rate } from "@/lib/rating";
+import { RECALL_URL } from "@/lib/recalls";
 import { Conditions } from "@/lib/types";
 
 type FilterKey = "all" | "favorites" | RegionId;
@@ -212,7 +213,30 @@ export default function Board() {
           ))}
         </div>
       )}
+
+      <RecallBanner />
     </div>
+  );
+}
+
+/** Sister-site banner. Sits BELOW the board on purpose: the harbor grid is what someone
+ *  opened the app to read, and a promo above it would push the actual answer down the
+ *  page. Named as ours rather than dressed up as a third-party notice. */
+function RecallBanner() {
+  return (
+    <a
+      href={RECALL_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 hover:bg-brand/10"
+    >
+      <span aria-hidden="true">📡</span>
+      <span className="text-sm font-semibold text-strong">Recall Monitor</span>
+      <span className="text-sm text-fg">
+        Boats, engines, lifejackets and more — recall alerts across US and Canadian databases.
+      </span>
+      <span className="ml-auto whitespace-nowrap text-sm text-brand">Our sister site ↗</span>
+    </a>
   );
 }
 
