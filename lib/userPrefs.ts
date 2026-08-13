@@ -1,8 +1,7 @@
 // Per-user alert preferences, stored at users/{uid} in the "sailing" Firestore
 // database. Read/written client-side; security rules restrict access to the owner.
 
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "./firebase";
+import { getFirestoreDb } from "./firebase";
 import { Compass16 } from "./units";
 import { DEFAULT_BOAT_ID, DEFAULT_SKILL, Skill } from "./boats";
 import { BoatSpec } from "./boatSpecs";
@@ -42,8 +41,17 @@ export function defaultPrefs(email: string, displayName: string | null): AlertPr
   };
 }
 
+/** The user's doc plus the reader/writer, with the Firestore SDK loaded on demand.
+ *  Dynamic rather than a static import so the ~4 s parse never lands in the server
+ *  bundle — see the note in lib/firebase.ts. Every caller here is already async. */
+async function userDoc(uid: string) {
+  const [{ doc, getDoc, setDoc }, db] = await Promise.all([import("firebase/firestore"), getFirestoreDb()]);
+  return { ref: doc(db, "users", uid), getDoc, setDoc };
+}
+
 export async function loadPrefs(uid: string): Promise<AlertPrefs | null> {
-  const snap = await getDoc(doc(db, "users", uid));
+  const { ref, getDoc } = await userDoc(uid);
+  const snap = await getDoc(ref);
   if (!snap.exists()) return null;
   const data = snap.data();
   // The user doc may hold only customBoats (no alert prefs yet) — treat that as "no prefs".
@@ -52,25 +60,30 @@ export async function loadPrefs(uid: string): Promise<AlertPrefs | null> {
 
 // merge so writing alert prefs and writing custom boats never clobber each other.
 export async function savePrefs(uid: string, prefs: AlertPrefs): Promise<void> {
-  await setDoc(doc(db, "users", uid), { ...prefs, updatedAt: Date.now() }, { merge: true });
+  const { ref, setDoc } = await userDoc(uid);
+  await setDoc(ref, { ...prefs, updatedAt: Date.now() }, { merge: true });
 }
 
 /** Custom boats live on the same users/{uid} doc (own-document rule already covers it). */
 export async function loadCustomBoats(uid: string): Promise<BoatSpec[]> {
-  const snap = await getDoc(doc(db, "users", uid));
+  const { ref, getDoc } = await userDoc(uid);
+  const snap = await getDoc(ref);
   return snap.exists() ? ((snap.data().customBoats as BoatSpec[]) ?? []) : [];
 }
 
 export async function saveCustomBoats(uid: string, boats: BoatSpec[]): Promise<void> {
-  await setDoc(doc(db, "users", uid), { customBoats: boats }, { merge: true });
+  const { ref, setDoc } = await userDoc(uid);
+  await setDoc(ref, { customBoats: boats }, { merge: true });
 }
 
 /** Favorite harbor ids live on the same users/{uid} doc (own-document rule covers it). */
 export async function loadFavorites(uid: string): Promise<string[]> {
-  const snap = await getDoc(doc(db, "users", uid));
+  const { ref, getDoc } = await userDoc(uid);
+  const snap = await getDoc(ref);
   return snap.exists() ? ((snap.data().favorites as string[]) ?? []) : [];
 }
 
 export async function saveFavorites(uid: string, ids: string[]): Promise<void> {
-  await setDoc(doc(db, "users", uid), { favorites: ids }, { merge: true });
+  const { ref, setDoc } = await userDoc(uid);
+  await setDoc(ref, { favorites: ids }, { merge: true });
 }
