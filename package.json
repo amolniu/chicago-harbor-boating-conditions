@@ -15,8 +15,7 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "validate:stations": "vitest run --config vitest.live.config.ts",
-    "predeploy": "node -e \"for (const d of ['.next/dev','.next/cache']) require('fs').rmSync(d, { recursive: true, force: true })\"",
-    "deploy": "firebase deploy --only hosting --project mootek-consulting"
+    "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
