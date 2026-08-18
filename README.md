@@ -1,7 +1,9 @@
-# Chicago Harbor Sailing Dashboard
+# Great Lakes Harbor Report
 
-**Should I sail out of my harbor right now?** A green / yellow / red status for every
-Chicago Park District harbor, personalized to your **boat** and **skill level**.
+**Should you go out right now?** A green / yellow / red status for 27 harbors across
+Illinois, Wisconsin and Michigan — from the Chicago lakefront to Green Bay and the Bays
+de Noc — personalized to your **boat** and **skill level**, whether that's a keelboat or
+a paddleboard.
 
 It does more than re-display a forecast. Lake-wide marine forecasts say "waves 2–4 ft"
 but can't tell you that a NE wind piles steep waves on **Belmont's** breakwall while

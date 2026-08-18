@@ -3,12 +3,12 @@ import "./globals.css";
 import { AuthProvider } from "@/components/auth";
 import { PrefsProvider } from "@/components/prefs";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/components/theme";
+import { APP_NAME, DESCRIPTION } from "@/lib/brand";
 import { Header } from "@/components/Header";
 
 export const metadata: Metadata = {
-  title: "Chicago Harbor Sailing",
-  description:
-    "Green / yellow / red sailing status for every Chicago harbor, personalized to your boat and skill — should I sail right now?",
+  title: APP_NAME,
+  description: DESCRIPTION,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -5,6 +5,7 @@ import { usePrefs } from "./prefs";
 import { useAuth } from "./auth";
 import { useTheme } from "./theme";
 import { BOATS, SKILLS, Skill } from "@/lib/boats";
+import { APP_NAME, TAGLINE } from "@/lib/brand";
 
 export function Header() {
   const { boatId, skill, setBoatId, setSkill, customBoats } = usePrefs();
@@ -15,10 +16,8 @@ export function Header() {
         <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
           <span className="text-xl">⛵</span>
           <span>
-            Chicago Harbor Sailing
-            <span className="ml-2 hidden text-xs font-normal text-muted sm:inline">
-              should I sail right now?
-            </span>
+            {APP_NAME}
+            <span className="ml-2 hidden text-xs font-normal text-muted sm:inline">{TAGLINE}</span>
           </span>
         </Link>
 

@@ -1,10 +1,15 @@
 @AGENTS.md
 
-# Chicago Harbor Sailing Dashboard
+# Great Lakes Harbor Report
 
-Green/yellow/red "should I sail right now?" status per Chicago harbor, personalized to
+Green/yellow/red "should you go out right now?" status per harbor, personalized to
 boat + skill. The value is **interpretation** of NOAA/NDBC data, not aggregation. Next.js 16
 (App Router) + TypeScript + Tailwind v4, deploy target Vercel + Neon Postgres.
+
+The product name lives in `lib/brand.ts` — nothing else hardcodes it, because it is
+expected to change again (dropping "Great Lakes" for plain "Harbor Report"). Keep the
+name free of geography it will outgrow, and of "sailing" — the app rates kayaks and
+paddleboards too (`BoatProfile.craft`), and the copy is deliberately craft-neutral.
 
 ## Where things live
 - `lib/harbors.ts` — **the core IP.** Per-harbor exposure model: `entranceBearing`,
