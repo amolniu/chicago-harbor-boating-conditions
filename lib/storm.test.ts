@@ -46,6 +46,28 @@ describe("classifyStorm", () => {
     expect(o.gustPeakKt).toBe(30);
   });
 
+  // Regression: real HRRR output for Chicago on 2026-08-13. CAPE peaks mid-afternoon
+  // and has collapsed to ZERO by the time the line arrives in the evening — which is
+  // normal, convection consumes it. The original rule required CAPE >= 500 AND rain, so
+  // it reported no stormy hours at all through 13 mm/h rain with 19 kt gusts.
+  it("catches a squall line whose CAPE has already collapsed", () => {
+    const cape = [210, 140, 490, 980, 570, 330, 360, 250, 0, 0, 0, 0];
+    const precip = [0, 0, 0, 0, 0, 0.4, 0, 0.4, 7.6, 13.3, 2.2, 4.3];
+    const gust = [4, 8, 7, 6, 9, 17, 8, 10, 10, 19, 14, 17];
+    const o = classifyStorm(hourly(now, cape, precip, gust), now);
+    expect(o.stormyHours.length, "the evening rain hours must be flagged").toBeGreaterThan(0);
+    expect(o.level).not.toBe("none");
+  });
+
+  it("does not treat drizzle on stable air as a storm", () => {
+    // Guard the other direction: light rain with no instability is just rain.
+    const o = classifyStorm(
+      hourly(now, Array(12).fill(0), Array(12).fill(0.3), Array(12).fill(8)),
+      now,
+    );
+    expect(o.stormyHours).toHaveLength(0);
+  });
+
   it("localizes the headline hour to the harbor's timezone", () => {
     const cape = [100, 200, 400, 1600, 1700, 900, ...Array(6).fill(100)];
     const precip = [0, 0, 0.1, 0.5, 0.4, 0.1, ...Array(6).fill(0)];

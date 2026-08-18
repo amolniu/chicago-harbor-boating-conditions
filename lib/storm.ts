@@ -59,8 +59,18 @@ function fmtHour(ms: number, tz: string): string {
 export function classifyStorm(h: StormHourly, now: number, tz: string = DEFAULT_TZ): StormOutlook {
   const n = h.time.length;
   const at = (arr: number[], i: number) => arr[i] ?? 0;
-  // A "stormy" hour = convective rain on unstable air.
-  const stormy = (i: number) => at(h.cape, i) >= 500 && at(h.precip, i) >= 0.2;
+  // A "stormy" hour is convective rain on unstable air — OR simply heavy rain.
+  //
+  // The second clause is not redundant. CAPE is CONSUMED by convection, so once a
+  // squall line or frontal band is actually overhead, grid-point CAPE has usually
+  // collapsed toward zero even as the rain peaks. Requiring both at once left the app
+  // blind exactly when a storm arrived: a Chicago evening line forecast at 13 mm/h
+  // with 19 kt gusts registered as no stormy hours at all, because CAPE by then read 0.
+  // Heavy rain is worth staying off the water for on its own — visibility collapses and
+  // the gusts come with it — regardless of whether the instability is still measurable.
+  const HEAVY_RAIN_MM = 2.5;
+  const stormy = (i: number) =>
+    (at(h.cape, i) >= 500 && at(h.precip, i) >= 0.2) || at(h.precip, i) >= HEAVY_RAIN_MM;
 
   // Index of the hour covering "now".
   let cur = 0;
@@ -82,7 +92,10 @@ export function classifyStorm(h: StormHourly, now: number, tz: string = DEFAULT_
   const capeNow = h.cape[cur] ?? null;
   const gustPeakKt = next12.length ? Math.max(...next12.map((i) => at(h.gustKt, i))) : null;
 
-  const activeNow = stormy(cur) || stormy(Math.min(cur + 1, n - 1)) || (at(h.precip, cur) >= 0.3 && at(h.cape, cur) >= 300);
+  // The last clause catches convective rain that hasn't met the full `stormy` bar yet;
+  // genuinely heavy rain is already covered by stormy() without needing any CAPE.
+  const activeNow =
+    stormy(cur) || stormy(Math.min(cur + 1, n - 1)) || (at(h.precip, cur) >= 0.3 && at(h.cape, cur) >= 300);
   const elevated = next6.some(stormy) || next6.some((i) => at(h.cape, i) >= 1500 && at(h.precip, i) >= 0.1);
   const gusty = (gustPeakKt ?? 0) >= 25;
   const watch = next12.some((i) => at(h.cape, i) >= 800) || gusty;
