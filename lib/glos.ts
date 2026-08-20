@@ -49,6 +49,13 @@ export interface GlosCurrent {
  *  "conditions right now", so the caller can fall back to the model. */
 const MAX_OBS_AGE_MS = 3 * 3600_000;
 
+/** Plausible dominant wave period on the Great Lakes. Spotter peak-period readings spike
+ *  to 25-34 s when the sea is nearly flat and the spectral peak lands on noise (observed
+ *  on all three buoys in use: medians 2.5-4.5 s, maxima 25-34 s). Left unfiltered those
+ *  spikes read as "longer period — rolling and easier-motioned" in the sea-state intel
+ *  when it is actually small chop, so drop them and let the gridpoint supply the period. */
+const PLAUSIBLE_PERIOD_S: [number, number] = [1, 15];
+
 interface ObsPoint {
   timestamp: string;
   value: number | null;
@@ -112,9 +119,14 @@ export async function getGlosCurrent(ref: GlosWaveRef): Promise<GlosCurrent | nu
   const temp = newest(params, ref.tempId, now);
   if (!wave && !temp) return null; // nothing usable
 
+  const periodS =
+    period?.value != null && period.value >= PLAUSIBLE_PERIOD_S[0] && period.value <= PLAUSIBLE_PERIOD_S[1]
+      ? period.value
+      : null;
+
   return {
     waveFt: wave?.value == null ? null : wave.value * M_TO_FT,
-    wavePeriodS: period?.value ?? null,
+    wavePeriodS: periodS,
     waveDir: dir?.value ?? null,
     waterTempF: temp?.value == null ? null : kelvinToF(temp.value),
     observedAt: wave?.timestamp ?? temp?.timestamp ?? null,

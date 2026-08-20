@@ -263,6 +263,9 @@ export const HARBORS: Harbor[] = [
     // Chicago Buoy over 24 h (`npm run validate:stations`). Under-reading makes conditions
     // look safer than they are, so use the open-lake buoy the neighbouring harbors use.
     buoyStation: "45198",
+    // 45198 already supplies this harbor's wind, so its wave sensor is fetched on every
+    // poll and was simply being discarded. Wiring it costs no extra request.
+    waveBuoy: { station: "45198", km: 12 },
     marineZone: "LMZ742",
     notes: {
       entrance: "Jackson Park inner harbor; moderate shelter behind the outer works.",
@@ -282,6 +285,9 @@ export const HARBORS: Harbor[] = [
     // Chicago Buoy over 24 h (`npm run validate:stations`). Under-reading makes conditions
     // look safer than they are, so use the open-lake buoy the neighbouring harbors use.
     buoyStation: "45198",
+    // 45198 already supplies this harbor's wind, so its wave sensor is fetched on every
+    // poll and was simply being discarded. Wiring it costs no extra request.
+    waveBuoy: { station: "45198", km: 12 },
     marineZone: "LMZ742",
     notes: {
       entrance: "Reached through the outer harbor; the inner basin is well protected.",
@@ -301,6 +307,9 @@ export const HARBORS: Harbor[] = [
     // Chicago Buoy over 24 h (`npm run validate:stations`). Under-reading makes conditions
     // look safer than they are, so use the open-lake buoy the neighbouring harbors use.
     buoyStation: "45198",
+    // 45198 already supplies this harbor's wind, so its wave sensor is fetched on every
+    // poll and was simply being discarded. Wiring it costs no extra request.
+    waveBuoy: { station: "45198", km: 12 },
     marineZone: "LMZ742",
     notes: {
       entrance: "The most exposed of the Jackson Park basins — open to the east and northeast.",
@@ -333,6 +342,8 @@ export const HARBORS: Harbor[] = [
     // 9.9 vs 19.4). Half the true wind is the dangerous direction for a go/no-go call,
     // so the gridpoint model — which tracks the offshore buoy closely here — wins.
     windFromGrid: true,
+    // No NDBC wave buoy within 57 km; this Spotter is 13 km offshore.
+    waveBuoy: { km: 13, glos: { datasetId: 609, waveId: 4842, periodId: 4849, dirId: 4843, tempId: 4838 } },
     marineZone: "LMZ542",
     discussionOffice: "GRB",
     radarStation: "KGRB",
@@ -435,6 +446,8 @@ export const HARBORS: Harbor[] = [
     openWaterBearing: 290,
     exposedDirs: ["W", "WNW"],
     buoyStation: "45026",
+    // Same station as the wind source; its wave sensor was going unused.
+    waveBuoy: { station: "45026", km: 19 },
     marineZone: "LMZ043",
     discussionOffice: "IWX",
     radarStation: "KGRR",
@@ -456,6 +469,8 @@ export const HARBORS: Harbor[] = [
     openWaterBearing: 330,
     exposedDirs: ["NW", "NNW", "N"],
     buoyStation: "MCYI3",
+    // MCYI3 reports no waves; 45170 (Michigan City Buoy) does, 19 km offshore.
+    waveBuoy: { station: "45170", km: 19 },
     marineZone: "LMZ046",
     discussionOffice: "IWX",
     radarStation: "KGRR",
@@ -523,6 +538,9 @@ export const HARBORS: Harbor[] = [
     openWaterBearing: 285,
     exposedDirs: ["W", "WNW"],
     buoyStation: "45161",
+    // 45161 has no wave or temp sensor; the Muskegon Spotter sits 9 km out, effectively
+    // co-located with it, and cross-validates at 0.92x the Grand Haven Spotter.
+    waveBuoy: { km: 9, glos: { datasetId: 274, waveId: 5122, periodId: 5128, dirId: 5123, tempId: 5239 } },
     marineZone: "LMZ847",
     discussionOffice: "GRR",
     radarStation: "KGRR",
@@ -614,6 +632,9 @@ export const HARBORS: Harbor[] = [
     openWaterBearing: 160,
     exposedDirs: ["S", "SSE", "SE"],
     windFromGrid: true,
+    // First observed waves + water temp anywhere in Green Bay: the Little Bay de Noc
+    // Spotter is 8.8 km out, almost exactly on this harbor's fetch axis (bearing 161).
+    waveBuoy: { km: 9, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId: 10324, tempId: 10325 } },
     marineZone: "LMZ221",
     discussionOffice: "MQT",
     radarStation: "KMQT",
@@ -657,6 +678,8 @@ export const HARBORS: Harbor[] = [
     openWaterBearing: 180,
     exposedDirs: ["S", "SSW", "SSE"],
     windFromGrid: true,
+    // Shares Escanaba's Little Bay de Noc Spotter, 19 km down the bay on bearing 178.
+    waveBuoy: { km: 19, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId: 10324, tempId: 10325 } },
     marineZone: "LMZ221",
     discussionOffice: "MQT",
     radarStation: "KMQT",
@@ -674,7 +697,9 @@ export const HARBORS: Harbor[] = [
     lat: 45.1906, lon: -87.1276,
     entranceBearing: 270,
     exposureScale: 0.35,
-    openWaterBearing: 260,
+    // 315, not the 260 first estimated from the chart: ray-casting marine-vs-land zones
+    // outward on 16 bearings puts the longest contiguous fetch to the NW, up Green Bay.
+    openWaterBearing: 315,
     exposedDirs: ["W", "WSW", "NW"],
     windFromGrid: true,
     marineZone: "LMZ521",
