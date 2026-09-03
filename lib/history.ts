@@ -147,7 +147,17 @@ export interface GreenStreak {
   window: number;
 }
 
-/** "Green X of the last N days", skipping today (it isn't over yet) and unrated days. */
+/** YYYY-MM-DD minus n days, in plain date arithmetic. */
+export function dateMinus(date: string, n: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+/** "Green X of the last N days" over the last N CALENDAR days before today — never
+ *  the last N recorded days, which would present a dark station's stale history as
+ *  recent (Belmont's wind station once went two weeks dark and the newest data was
+ *  from mid-August). Missing and unratable days simply aren't counted. */
 export function greenStreak(
   days: DaySummary[],
   harbor: Harbor,
@@ -156,7 +166,8 @@ export function greenStreak(
   today: string,
   window = STREAK_DAYS,
 ): GreenStreak {
-  const past = days.filter((d) => d.date < today).slice(0, window);
+  const cutoff = dateMinus(today, window);
+  const past = days.filter((d) => d.date < today && d.date >= cutoff);
   const rated = past.map((d) => rateDay(d, harbor, boat, skill)).filter((r) => r.status !== "unknown");
   return { green: rated.filter((r) => r.status === "green").length, rated: rated.length, window };
 }
@@ -174,22 +185,20 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-/** Where today's afternoon sits against history, re-rated for this boat + skill.
- *  Uses same-calendar-month afternoons when enough exist (so August is judged
- *  against Augusts), otherwise every recorded afternoon. Null until there's enough
- *  history to make the claim honestly, or when today can't be rated. */
+/** Where conditions RIGHT NOW sit against historical afternoons, re-rated for this
+ *  boat + skill. `nowScore` is the live rating the page already computed — comparing
+ *  the live moment (instead of waiting for today's afternoon summary to exist) keeps
+ *  the claim available all day, not just after noon. Uses same-calendar-month
+ *  afternoons when enough exist (so September is judged against Septembers),
+ *  otherwise every recorded afternoon. Null until history can carry the claim. */
 export function roughnessPercentile(
   days: DaySummary[],
   harbor: Harbor,
   boat: BoatProfile,
   skill: Skill,
   today: string,
+  nowScore: number,
 ): Percentile | null {
-  const todaySummary = days.find((d) => d.date === today);
-  if (!todaySummary) return null;
-  const todayRated = rateDay(todaySummary, harbor, boat, skill);
-  if (todayRated.status === "unknown") return null;
-
   const past = days.filter((d) => d.date !== today);
   const month = Number(today.slice(5, 7)) - 1;
   const sameMonth = past.filter((d) => Number(d.date.slice(5, 7)) - 1 === month);
@@ -203,8 +212,11 @@ export function roughnessPercentile(
     .map((r) => r.score);
   if (scores.length < MIN_DAYS_FOR_PERCENTILE) return null;
 
-  // Rougher = lower score. Count comparison days that were calmer (scored higher).
-  const calmer = scores.filter((s) => s > todayRated.score).length;
+  // Rougher = lower score. Days that scored higher were calmer; days that scored the
+  // SAME count half (midrank) — otherwise a perfectly calm day reads "calmer than
+  // 100% of afternoons" while sitting in a pile of equally calm ones (15 of the first
+  // 44 backfilled afternoons tied at the top on the very first live check).
+  const calmer = scores.filter((s) => s > nowScore).length + scores.filter((s) => s === nowScore).length / 2;
   return {
     roughness: Math.round((calmer / scores.length) * 100),
     bucketLabel: useMonth ? `${MONTHS[month]} afternoons` : "recorded afternoons",

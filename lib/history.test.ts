@@ -99,25 +99,33 @@ describe("greenStreak", () => {
     expect(s.rated).toBe(3);
     expect(s.window).toBe(10);
   });
+
+  it("never presents a dark station's stale history as recent", () => {
+    // Newest data is 20 days old (station dark since): the 10-day window is empty,
+    // not back-filled with June afternoons wearing a "last 10 days" label.
+    const days = [1, 2, 3, 4, 5].map((n) => day(`2026-06-${String(n).padStart(2, "0")}`, 5));
+    const s = greenStreak(days, belmont, catalina, "intermediate", "2026-07-12", 10);
+    expect(s.rated).toBe(0);
+  });
 });
 
 describe("roughnessPercentile", () => {
   const july = (n: number, windKt: number) => day(`2026-07-${String(n).padStart(2, "0")}`, windKt);
 
   it("stays silent until there is enough history", () => {
-    const days = [july(12, 20), july(11, 5), july(10, 5)];
-    expect(roughnessPercentile(days, belmont, catalina, "intermediate", "2026-07-12")).toBeNull();
+    const days = [july(11, 5), july(10, 5)];
+    expect(roughnessPercentile(days, belmont, catalina, "intermediate", "2026-07-12", 50)).toBeNull();
   });
 
-  it("ranks today against same-month afternoons", () => {
-    // 6 calm (score 100) + 3 stormy (score 0) + today at 20 kt (score 50):
-    // 6 of 9 comparison days were calmer.
+  it("ranks the live moment against same-month afternoons", () => {
+    // 6 calm (score 100) + 3 stormy (score 0), live score 50 right now:
+    // 6 of 9 comparison days were calmer. Today's own partial rows are excluded.
     const days = [
-      july(12, 20),
+      july(12, 20), // today — must not join the comparison bucket
       ...[1, 2, 3, 4, 5, 6].map((n) => july(n, 5)),
       ...[7, 8, 9].map((n) => july(n, 30)),
     ];
-    const p = roughnessPercentile(days, belmont, catalina, "intermediate", "2026-07-12")!;
+    const p = roughnessPercentile(days, belmont, catalina, "intermediate", "2026-07-12", 50)!;
     expect(p.roughness).toBe(67);
     expect(p.bucketLabel).toBe("July afternoons");
     expect(p.comparedDays).toBe(9);
@@ -128,13 +136,24 @@ describe("roughnessPercentile", () => {
       day("2026-07-12", 20), // today, July — but July history is empty
       ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => day(`2026-06-${String(n).padStart(2, "0")}`, 5)),
     ];
-    const p = roughnessPercentile(days, belmont, catalina, "intermediate", "2026-07-12")!;
+    const p = roughnessPercentile(days, belmont, catalina, "intermediate", "2026-07-12", 50)!;
     expect(p.bucketLabel).toBe("recorded afternoons");
     expect(p.roughness).toBe(100); // every June day was calmer
   });
 
-  it("returns null when today has no summary yet", () => {
+  it("splits ties down the middle instead of overclaiming", () => {
+    // Every recorded afternoon is exactly as calm as right now: the honest read is
+    // "middle of the pack", never "calmer than 100%".
     const days = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => july(n, 5));
-    expect(roughnessPercentile(days, belmont, catalina, "intermediate", "2026-07-12")).toBeNull();
+    const nowScore = rateDay(july(1, 5), belmont, catalina, "intermediate").score;
+    const p = roughnessPercentile(days, belmont, catalina, "intermediate", "2026-07-12", nowScore)!;
+    expect(p.roughness).toBe(50);
+  });
+
+  it("works before today's afternoon exists — it compares the LIVE score", () => {
+    // A 9 AM visitor has no afternoon summary for today yet; the claim must still work.
+    const days = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => july(n, 5));
+    const p = roughnessPercentile(days, belmont, catalina, "intermediate", "2026-07-12", 0)!;
+    expect(p.roughness).toBe(100);
   });
 });

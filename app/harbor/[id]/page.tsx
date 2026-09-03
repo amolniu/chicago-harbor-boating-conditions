@@ -12,7 +12,7 @@ import { STATUS_META, statusLabel } from "@/components/status-meta";
 import { getHarbor } from "@/lib/harbors";
 import { rate } from "@/lib/rating";
 import { computeWindow } from "@/lib/window";
-import { greenStreak, roughnessPercentile, rateDay, type DaySummary } from "@/lib/history";
+import { greenStreak, roughnessPercentile, rateDay, dateMinus, type DaySummary } from "@/lib/history";
 import { harborIntel } from "@/lib/intel";
 import { degToCompass } from "@/lib/units";
 import { fmtLocalTime } from "@/lib/astro";
@@ -87,16 +87,18 @@ export default function HarborDetail() {
   // Re-rated in the browser for the CURRENT boat + skill, like everything else —
   // the server only ships raw per-afternoon summaries.
   const history = useMemo(() => {
-    if (!hist?.enabled || !hist.today || !harbor) return null;
-    const pct = roughnessPercentile(hist.days, harbor, boat, skill, hist.today);
+    if (!hist?.enabled || !hist.today || !harbor || !rating) return null;
+    const pct = roughnessPercentile(hist.days, harbor, boat, skill, hist.today, rating.score);
     const streak = greenStreak(hist.days, harbor, boat, skill, hist.today);
+    // Dots cover the streak's CALENDAR window only — a dark station's stale history
+    // must not dress up as "the last 10 afternoons".
+    const cutoff = dateMinus(hist.today, streak.window);
     const dots = hist.days
-      .filter((d) => d.date < hist.today!)
-      .slice(0, streak.window)
+      .filter((d) => d.date < hist.today! && d.date >= cutoff)
       .map((d) => ({ date: d.date, status: rateDay(d, harbor, boat, skill).status }))
       .reverse();
     return { pct, streak, dots, dayCount: hist.days.length };
-  }, [hist, harbor, boat, skill]);
+  }, [hist, harbor, boat, skill, rating]);
 
   if (!harbor) return <NotFound />;
   if (error) return <Message>Couldn&apos;t load this harbor&apos;s data. Try again shortly.</Message>;
@@ -194,14 +196,14 @@ export default function HarborDetail() {
             {history.pct ? (
               <p className="mb-3 text-lg font-medium text-strong">
                 {history.pct.roughness >= 50
-                  ? `Rougher than ${history.pct.roughness}%`
-                  : `Calmer than ${100 - history.pct.roughness}%`}{" "}
+                  ? `Right now: rougher than ${history.pct.roughness}%`
+                  : `Right now: calmer than ${100 - history.pct.roughness}%`}{" "}
                 of {history.pct.bucketLabel} for your setup.
               </p>
             ) : (
               <p className="mb-3 text-sm text-muted">
                 Collecting history — {history.dayCount} afternoon{history.dayCount === 1 ? "" : "s"} recorded so
-                far. Comparisons appear after {8}.
+                far. Comparisons appear after 8.
               </p>
             )}
             {history.streak.rated > 0 && (
