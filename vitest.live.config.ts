@@ -3,6 +3,11 @@
 // deterministic — this one deliberately hits NDBC, NWS and GLOS over the network.
 import { defineConfig } from "vitest/config";
 import path from "node:path";
+import { loadDotEnv } from "./scripts/load-env";
+
+// Live scripts (validator, backfill) need DATABASE_URL / NWS_USER_AGENT from .env;
+// vitest does not load env files on its own.
+loadDotEnv(__dirname);
 
 export default defineConfig({
   resolve: { alias: { "@": path.resolve(__dirname, ".") } },

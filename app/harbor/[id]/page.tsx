@@ -12,6 +12,7 @@ import { STATUS_META, statusLabel } from "@/components/status-meta";
 import { getHarbor } from "@/lib/harbors";
 import { rate } from "@/lib/rating";
 import { computeWindow } from "@/lib/window";
+import { greenStreak, roughnessPercentile, rateDay, type DaySummary } from "@/lib/history";
 import { harborIntel } from "@/lib/intel";
 import { degToCompass } from "@/lib/units";
 import { fmtLocalTime } from "@/lib/astro";
@@ -53,6 +54,8 @@ export default function HarborDetail() {
   const [error, setError] = useState(false);
   const harbor = getHarbor(id);
 
+  const [hist, setHist] = useState<{ enabled: boolean; days: DaySummary[]; today: string | null } | null>(null);
+
   useEffect(() => {
     let live = true;
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -61,6 +64,12 @@ export default function HarborDetail() {
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((d) => live && setB(d))
       .catch(() => live && setError(true));
+    // History loads separately and never blocks the live picture; a failure just
+    // means the panel stays hidden.
+    fetch(`/api/harbor/${id}/history`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => live && setHist(d))
+      .catch(() => {});
     return () => {
       live = false;
     };
@@ -75,6 +84,19 @@ export default function HarborDetail() {
     [b, harbor, boat, skill],
   );
   const intel = useMemo(() => (b && harbor ? harborIntel(harbor, b.conditions, boat, skill) : null), [b, harbor, boat, skill]);
+  // Re-rated in the browser for the CURRENT boat + skill, like everything else —
+  // the server only ships raw per-afternoon summaries.
+  const history = useMemo(() => {
+    if (!hist?.enabled || !hist.today || !harbor) return null;
+    const pct = roughnessPercentile(hist.days, harbor, boat, skill, hist.today);
+    const streak = greenStreak(hist.days, harbor, boat, skill, hist.today);
+    const dots = hist.days
+      .filter((d) => d.date < hist.today!)
+      .slice(0, streak.window)
+      .map((d) => ({ date: d.date, status: rateDay(d, harbor, boat, skill).status }))
+      .reverse();
+    return { pct, streak, dots, dayCount: hist.days.length };
+  }, [hist, harbor, boat, skill]);
 
   if (!harbor) return <NotFound />;
   if (error) return <Message>Couldn&apos;t load this harbor&apos;s data. Try again shortly.</Message>;
@@ -165,6 +187,54 @@ export default function HarborDetail() {
             wind-sea estimates.
           </p>
         </Panel>
+
+        {/* Historical context — hidden entirely until the DB has history */}
+        {history && (
+          <Panel title="How today compares" className="lg:col-span-2">
+            {history.pct ? (
+              <p className="mb-3 text-lg font-medium text-strong">
+                {history.pct.roughness >= 50
+                  ? `Rougher than ${history.pct.roughness}%`
+                  : `Calmer than ${100 - history.pct.roughness}%`}{" "}
+                of {history.pct.bucketLabel} for your setup.
+              </p>
+            ) : (
+              <p className="mb-3 text-sm text-muted">
+                Collecting history — {history.dayCount} afternoon{history.dayCount === 1 ? "" : "s"} recorded so
+                far. Comparisons appear after {8}.
+              </p>
+            )}
+            {history.streak.rated > 0 && (
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  {history.dots.map((d) => (
+                    <span
+                      key={d.date}
+                      title={`${d.date}: ${d.status}`}
+                      className={`h-3 w-3 rounded-full ${
+                        d.status === "green"
+                          ? "bg-good"
+                          : d.status === "yellow"
+                            ? "bg-warn"
+                            : d.status === "red"
+                              ? "bg-bad"
+                              : "bg-idle"
+                      }`}
+                    />
+                  ))}
+                </div>
+                <span className="text-sm text-fg">
+                  Green {history.streak.green} of the last {history.streak.rated} afternoons for this boat.
+                </span>
+              </div>
+            )}
+            <p className="mt-2 text-xs text-faint">
+              Afternoons (noon–6 PM local), re-rated for your current boat + skill — change either and this
+              recomputes. Storm cells and warnings aren&apos;t reconstructable historically, so past days compare
+              wind, waves and advisories only.
+            </p>
+          </Panel>
+        )}
 
         {/* Harbor intelligence — condition-aware */}
         <Panel title="Harbor intelligence" className="lg:col-span-2">

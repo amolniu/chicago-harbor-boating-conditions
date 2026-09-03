@@ -14,8 +14,9 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "validate:stations": "vitest run --config vitest.live.config.ts",
-    "deploy": "node scripts/deploy.mjs"
+    "validate:stations": "vitest run scripts/validate-stations.live.ts --config vitest.live.config.ts",
+    "deploy": "node scripts/deploy.mjs",
+    "backfill:history": "vitest run scripts/backfill-history.live.ts --config vitest.live.config.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
