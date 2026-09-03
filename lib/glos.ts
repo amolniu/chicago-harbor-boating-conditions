@@ -2,9 +2,15 @@
 //
 // Why this exists: a few harbors sit next to a Sofar Spotter buoy that reports waves
 // and water temperature, in places where the nearest NDBC buoy reports neither (45161
-// serves Grand Haven / Whitehall with WVHT=MM). Wind is deliberately NOT taken from
-// here — see docs/ADDING_HARBORS.md, GLOS's closest platforms are often shore towers
-// that read roughly half the true wind.
+// serves Grand Haven / Whitehall with WVHT=MM).
+//
+// Wind: GLOS shore TOWERS are never a wind source — they read roughly half the true
+// wind. Spotter SPECTRAL wind (inferred from the wave field, not an anemometer) is
+// allowed per-platform via `windId`, and only after validation against a real
+// anemometer: triangulated 2026-09-02 over 14 days, Spotters read 1.1–1.25× high
+// (conservative — safe direction) where the gridpoint model read 0.72× at the same
+// site as the MNMM4 anemometer (optimistic — the dangerous direction on a go/no-go
+// call). Spotters report wind SPEED only; direction must come from the model.
 //
 // Practical notes about the API (verified against the live service):
 //   • /obs, /obs-datasets.geojson and /parameters are open; /obs-latest needs a key.
@@ -18,7 +24,7 @@
 //
 // Server-only.
 
-import { M_TO_FT } from "./units";
+import { M_TO_FT, msToKt } from "./units";
 
 const OBS_URL = "https://seagull-api.glos.org/api/v1/obs";
 
@@ -35,6 +41,13 @@ export interface GlosWaveRef {
   dirId?: number;
   /** parameter_id for sea_water_temperature (KELVIN). Pick the shallowest depth. */
   tempId?: number;
+  /** parameter_id for wind_speed (m/s) — Spotter SPECTRAL wind, speed only. Set this
+   *  ONLY after validating the platform against a real anemometer (see header note);
+   *  the harbor's wind direction and gusts stay with the gridpoint model. */
+  windId?: number;
+  /** Short human name for the platform, shown as the wind source (e.g. "Bay de Noc
+   *  Spotter"). Falls back to "GLOS buoy". */
+  label?: string;
 }
 
 export interface GlosCurrent {
@@ -42,6 +55,9 @@ export interface GlosCurrent {
   wavePeriodS: number | null;
   waveDir: number | null;
   waterTempF: number | null;
+  /** Spectral wind speed (kt), only when the ref sets windId. No direction. */
+  windKt: number | null;
+  windObservedAt: string | null;
   observedAt: string | null;
 }
 
@@ -117,7 +133,8 @@ export async function getGlosCurrent(ref: GlosWaveRef): Promise<GlosCurrent | nu
   const period = newest(params, ref.periodId, now);
   const dir = newest(params, ref.dirId, now);
   const temp = newest(params, ref.tempId, now);
-  if (!wave && !temp) return null; // nothing usable
+  const windP = newest(params, ref.windId, now);
+  if (!wave && !temp && !windP) return null; // nothing usable
 
   const periodS =
     period?.value != null && period.value >= PLAUSIBLE_PERIOD_S[0] && period.value <= PLAUSIBLE_PERIOD_S[1]
@@ -129,6 +146,8 @@ export async function getGlosCurrent(ref: GlosWaveRef): Promise<GlosCurrent | nu
     wavePeriodS: periodS,
     waveDir: dir?.value ?? null,
     waterTempF: temp?.value == null ? null : kelvinToF(temp.value),
+    windKt: windP?.value == null ? null : msToKt(windP.value),
+    windObservedAt: windP?.timestamp ?? null,
     observedAt: wave?.timestamp ?? temp?.timestamp ?? null,
   };
 }

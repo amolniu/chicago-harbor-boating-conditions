@@ -343,6 +343,10 @@ export const HARBORS: Harbor[] = [
     // so the gridpoint model — which tracks the offshore buoy closely here — wins.
     windFromGrid: true,
     // No NDBC wave buoy within 57 km; this Spotter is 13 km offshore.
+    // tempId is INTERMITTENT (checked 2026-09-02: waves 72 obs/day, temp sporadic with
+    // multi-day gaps) but its values are real — its 48 F matched the Milwaukee ATW buoy
+    // during a west-shore upwelling while mid-lake read 71 F. Keep it: the staleness
+    // guard blanks the gaps, and an intermittent true cold-shock warning beats none.
     waveBuoy: { km: 13, glos: { datasetId: 609, waveId: 4842, periodId: 4849, dirId: 4843, tempId: 4838 } },
     marineZone: "LMZ542",
     discussionOffice: "GRB",
@@ -634,7 +638,11 @@ export const HARBORS: Harbor[] = [
     windFromGrid: true,
     // First observed waves + water temp anywhere in Green Bay: the Little Bay de Noc
     // Spotter is 8.8 km out, almost exactly on this harbor's fetch axis (bearing 161).
-    waveBuoy: { km: 9, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId: 10324, tempId: 10325 } },
+        // windId: spectral wind speed, validated 2026-09-02 vs the FPTM4 anemometer (1.24x,
+    // conservative) where the model read ~0.6x here. Speed only - direction and gusts
+    // stay with the model. KEEP the two ds-695 refs (escanaba/gladstone) IDENTICAL:
+    // GLOS fetches dedupe by datasetId, so one ref serves both harbors.
+waveBuoy: { km: 9, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId: 10324, tempId: 10325, windId: 10329, label: "Bay de Noc Spotter" } },
     marineZone: "LMZ221",
     discussionOffice: "MQT",
     radarStation: "KMQT",
@@ -679,7 +687,11 @@ export const HARBORS: Harbor[] = [
     exposedDirs: ["S", "SSW", "SSE"],
     windFromGrid: true,
     // Shares Escanaba's Little Bay de Noc Spotter, 19 km down the bay on bearing 178.
-    waveBuoy: { km: 19, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId: 10324, tempId: 10325 } },
+        // windId: spectral wind speed, validated 2026-09-02 vs the FPTM4 anemometer (1.24x,
+    // conservative) where the model read ~0.6x here. Speed only - direction and gusts
+    // stay with the model. KEEP the two ds-695 refs (escanaba/gladstone) IDENTICAL:
+    // GLOS fetches dedupe by datasetId, so one ref serves both harbors.
+waveBuoy: { km: 19, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId: 10324, tempId: 10325, windId: 10329, label: "Bay de Noc Spotter" } },
     marineZone: "LMZ221",
     discussionOffice: "MQT",
     radarStation: "KMQT",

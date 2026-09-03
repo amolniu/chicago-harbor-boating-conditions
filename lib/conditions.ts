@@ -90,7 +90,7 @@ function pickField(
   return { value: null, station: null };
 }
 
-function assemble(
+export function assemble(
   harbor: Harbor,
   buoys: Map<string, BuoyCurrent | null>,
   gridCurrent: GridCurrent | null,
@@ -129,12 +129,28 @@ function assemble(
   let gustKt: number | null;
   let windObservedAt: string | null;
   let windSource: string;
+  // Spectral wind from a validated Spotter (glos.windId): an OBSERVATION, so it beats
+  // the model — triangulated 2026-09-02, the gridpoint model read 0.72× a same-site
+  // anemometer on Green Bay (optimistic = the dangerous direction) while the Spotter
+  // read 1.1–1.25× (conservative). Spotters carry no wind DIRECTION, so direction
+  // stays with the model: direction is large-scale flow and models carry it well;
+  // magnitude is what under-reads over a narrow bay.
+  const spotterWindKt = harbor.waveBuoy?.glos?.windId != null ? glos?.windKt ?? null : null;
+
   if (wind.value != null) {
     windDir = wb?.windDir ?? null;
     windKt = wind.value;
     gustKt = wb?.gustKt ?? null;
     windObservedAt = wb?.observedAt ?? null;
     windSource = wind.station ?? harbor.buoyStation ?? "forecast";
+  } else if (spotterWindKt != null) {
+    windDir = gridCurrent?.windDir ?? null;
+    windKt = spotterWindKt;
+    // Keep the model's gust only when it says something the observation doesn't: an
+    // under-reading model's "gust" below the observed sustained wind is noise.
+    gustKt = gridCurrent?.gustKt != null && gridCurrent.gustKt > spotterWindKt ? gridCurrent.gustKt : null;
+    windObservedAt = glos?.windObservedAt ?? null;
+    windSource = harbor.waveBuoy?.glos?.label ?? "GLOS buoy";
   } else if (usesGrid) {
     windDir = gridCurrent?.windDir ?? null;
     windKt = gridCurrent?.windKt ?? null;

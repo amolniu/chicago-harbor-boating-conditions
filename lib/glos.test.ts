@@ -36,6 +36,15 @@ describe("getGlosCurrent", () => {
     expect(c!.waveFt, "the wave height is still good").toBeCloseTo(0.98, 1);
   });
 
+  it("converts spectral wind m/s to knots, and a wind-only payload still counts", async () => {
+    const REF_W = { ...REF, windId: 14 };
+    stub({ 14: 6.0 }); // wave/temp sensors dark, wind alive
+    const c = await getGlosCurrent(REF_W);
+    expect(c, "wind alone is still usable data").not.toBeNull();
+    expect(c!.windKt).toBeCloseTo(11.66, 1);
+    expect(c!.waveFt).toBeNull();
+  });
+
   it("returns null when the platform has gone quiet", async () => {
     const old = new Date(Date.now() - 8 * 3600_000).toISOString();
     vi.stubGlobal("fetch", vi.fn(async () => ({

@@ -183,9 +183,21 @@ Muskegon and Whitehall with `WVHT=MM`). Where a Sofar Spotter sits nearby, set
 `waveBuoy.glos` instead of `waveBuoy.station` and it supplies observed waves, period,
 direction and water temperature into the same distance-weighted blend.
 
-**Only ever use GLOS for waves/temp, never for wind.** Its closest platforms to our
-harbors are often shore `tower`s: the Chicago park towers sit 0.2–4 km out and read
-~12 kt below the offshore buoys. Filter to `platform_type == "moored_buoy"`.
+**GLOS wind rules (refined 2026-09-02):**
+
+- Shore `tower`s: **never.** The Chicago park towers sit 0.2–4 km out and read
+  ~12 kt below the offshore buoys. Filter to `platform_type == "moored_buoy"`.
+- Spotter **spectral wind** (`windId`): allowed, but only per-platform and only after
+  validating against a real anemometer over multi-day hourly-matched means. Spotters
+  carry no anemometer — their "wind" is inferred from the wave field, reads
+  **1.1–1.9× high at low wind** and converges to ~1.1× above 15 kt. That bias is
+  conservative (safe direction). It earned a place on Green Bay because the gridpoint
+  model there measured **0.72×** against the MNMM4 anemometer at the same site —
+  optimistic, the dangerous direction — so a slightly-high observation beats a
+  materially-low model. Spotters report wind **speed only**: direction and gusts stay
+  with the model (`assemble()` handles this).
+- Never validate against ds 687 ("GB Flo Waves") — its wind series is garbage
+  (0.14× a nearby anemometer).
 
 `/obs` returns opaque `parameter_id`s with no names and no units, and the id→name map is
 ~3.4 MB, so resolve the ids **once** and store them in the harbor config:
