@@ -124,6 +124,17 @@ export function assemble(
   const wind = pickField(buoys, windChain, "windKt");
   const wb = wind.station ? buoys.get(wind.station) : null;
 
+  // Direction and gust resolve DOWN THE CHAIN INDEPENDENTLY of speed, because a buoy
+  // can lose one sensor and keep another: 45198 (Chicago Buoy) currently reports speed
+  // on every row and WDIR/GST on none. Taking direction only from the speed station
+  // left all ten Chicago harbors with windDir === null, which silently disables the
+  // exposure model — exitWave and crosswind are skipped without a direction, so the
+  // harbor-exit half of the rating, the thing this app exists for, quietly vanished.
+  // Borrowing a direction from a neighbour ~10 km away is a far better approximation
+  // than having none; the lake's wind field is coherent at that scale.
+  const dirPick = pickField(buoys, windChain, "windDir");
+  const gustPick = pickField(buoys, windChain, "gustKt");
+
   let windDir: number | null;
   let windKt: number | null;
   let gustKt: number | null;
@@ -138,9 +149,12 @@ export function assemble(
   const spotterWindKt = harbor.waveBuoy?.glos?.windId != null ? glos?.windKt ?? null : null;
 
   if (wind.value != null) {
-    windDir = wb?.windDir ?? null;
     windKt = wind.value;
-    gustKt = wb?.gustKt ?? null;
+    // Model direction is the last resort — better a modeled bearing than none.
+    windDir = dirPick.value ?? gridCurrent?.windDir ?? null;
+    // A gust below the sustained wind is not a gust. That can happen when the gust
+    // comes from a different station than the speed, so require it to exceed it.
+    gustKt = gustPick.value != null && gustPick.value >= wind.value ? gustPick.value : null;
     windObservedAt = wb?.observedAt ?? null;
     windSource = wind.station ?? harbor.buoyStation ?? "forecast";
   } else if (spotterWindKt != null) {
