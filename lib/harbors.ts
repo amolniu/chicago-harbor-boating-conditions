@@ -141,7 +141,11 @@ export const HARBORS: Harbor[] = [
     entranceBearing: 150,
     exposureScale: 0.7,
     exposedDirs: ["SE", "SSE"],
-    buoyStation: "CHII2",
+    // 45198, not CHII2: the Harrison-Dever Crib station (GLERL) went whole-station dark
+    // 2026-08-18 with no retirement notice - live wind fell back fine, but history froze.
+    // The Chicago Buoy is 7-10 km out, already this harbor's wave source, and validated
+    // 1.01x. CHII2 stays in WIND_FALLBACK as a backup if GLERL revives it.
+    buoyStation: "45198",
     waveBuoy: { station: "45198", km: 10 },
     marineZone: "LMZ742",
     notes: {
@@ -158,7 +162,11 @@ export const HARBORS: Harbor[] = [
     entranceBearing: 60,
     exposureScale: 0.9,
     exposedDirs: ["NE", "ENE", "N"],
-    buoyStation: "CHII2",
+    // 45198, not CHII2: the Harrison-Dever Crib station (GLERL) went whole-station dark
+    // 2026-08-18 with no retirement notice - live wind fell back fine, but history froze.
+    // The Chicago Buoy is 7-10 km out, already this harbor's wave source, and validated
+    // 1.01x. CHII2 stays in WIND_FALLBACK as a backup if GLERL revives it.
+    buoyStation: "45198",
     waveBuoy: { station: "45198", km: 8 },
     marineZone: "LMZ742",
     notes: {
@@ -175,7 +183,11 @@ export const HARBORS: Harbor[] = [
     entranceBearing: 90,
     exposureScale: 0.3,
     shelteredDirs: ["W", "WSW", "SW", "WNW", "NW", "S", "SSW"],
-    buoyStation: "CHII2",
+    // 45198, not CHII2: the Harrison-Dever Crib station (GLERL) went whole-station dark
+    // 2026-08-18 with no retirement notice - live wind fell back fine, but history froze.
+    // The Chicago Buoy is 7-10 km out, already this harbor's wave source, and validated
+    // 1.01x. CHII2 stays in WIND_FALLBACK as a backup if GLERL revives it.
+    buoyStation: "45198",
     waveBuoy: { station: "45198", km: 8 },
     marineZone: "LMZ742",
     notes: {
@@ -406,7 +418,10 @@ export const HARBORS: Harbor[] = [
     entranceBearing: 120,
     exposureScale: 0.55,
     exposedDirs: ["NE", "E", "ESE"],
-    buoyStation: "CHII2",
+    // 45186, not CHII2: the Waukegan Buoy is 2-3 km away (CHII2 was a 48-53 km Chicago
+    // proxy, and went dark 2026-08-18 anyway). Validated 1.00x vs 45187 over 802 matched
+    // hours before shipping - proximity alone is never enough. Also reports waves + temp.
+    buoyStation: "45186",
     waveBuoy: { station: "45186", km: 3 },
     marineZone: "LMZ740",
     webcamUrl: "",
@@ -424,7 +439,10 @@ export const HARBORS: Harbor[] = [
     entranceBearing: 100,
     exposureScale: 0.6,
     exposedDirs: ["NE", "ENE", "E"],
-    buoyStation: "CHII2",
+    // 45186, not CHII2: the Waukegan Buoy is 2-3 km away (CHII2 was a 48-53 km Chicago
+    // proxy, and went dark 2026-08-18 anyway). Validated 1.00x vs 45187 over 802 matched
+    // hours before shipping - proximity alone is never enough. Also reports waves + temp.
+    buoyStation: "45186",
     waveBuoy: { station: "45186", km: 7 },
     marineZone: "LMZ740",
     webcamUrl: "",
