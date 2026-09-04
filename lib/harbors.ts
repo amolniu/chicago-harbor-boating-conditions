@@ -73,6 +73,17 @@ export interface Harbor {
   };
 }
 
+// Ordered wind fallbacks for the Chicago-neighborhood harbors, used when a harbor's own
+// station has no wind (e.g. 45198's anemometer drops out while its wave sensor keeps
+// reporting). All within ~10 km, so a neighbour is a fair proxy — far better than going
+// dark. CNII2 (Northerly Island) sits next to the downtown harbors, so it leads.
+// Lives here rather than in conditions.ts so the isomorphic health checker can read the
+// same chain the assembler uses (lib/stationHealth.ts).
+export const WIND_FALLBACK = ["CNII2", "CHII2", "45198", "CMTI2"];
+
+/** Chicago Buoy — full wave spectra; the wave fallback for harbors without their own. */
+export const PRIMARY_WAVE_STATION = "45198";
+
 export const DEFAULT_DISCUSSION_OFFICE = "LOT";
 export const DEFAULT_RADAR_STATION = "KLOT";
 export const DEFAULT_WEBCAM_URL = "https://www.glerl.noaa.gov/metdata/chi/chi01.jpg";

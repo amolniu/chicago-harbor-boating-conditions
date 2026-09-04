@@ -96,6 +96,14 @@ async function fetchText(url: string): Promise<string | null> {
  *  back (a neighbouring buoy, or the gridpoint model via harbor.windFromGrid). */
 const MAX_OBS_AGE_MS = 3 * 3600_000;
 
+/** Recent raw rows for a station, newest first — the input the health checker needs
+ *  to measure per-column fill rates. Deliberately does NOT apply the staleness guard:
+ *  the whole point is to see stale and partially-dead feeds for what they are. */
+export async function getBuoyRows(station: string, limit = 200): Promise<BuoyRow[]> {
+  const text = await fetchText(`https://www.ndbc.noaa.gov/data/realtime2/${station.toUpperCase()}.txt`);
+  return text ? parseRealtime2(text).slice(0, limit) : [];
+}
+
 /** Latest available reading for a station, filling each field from recent rows.
  *  Null when the station is unreachable, empty, or stale. */
 export async function getBuoyCurrent(station: string): Promise<BuoyCurrent | null> {

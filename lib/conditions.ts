@@ -6,7 +6,7 @@
 // Server-only.
 
 import { Conditions, type StormRisk } from "./types";
-import { Harbor, HARBORS } from "./harbors";
+import { Harbor, HARBORS, WIND_FALLBACK, PRIMARY_WAVE_STATION } from "./harbors";
 import { BuoyCurrent, getBuoyCurrent } from "./ndbc";
 import { getMarineForecast, getGridCurrent, type GridCurrent } from "./nws";
 import { getGlosCurrent, type GlosCurrent } from "./glos";
@@ -17,7 +17,6 @@ import { getBoat, DEFAULT_BOAT_ID, DEFAULT_SKILL } from "./boats";
 import { getDb } from "@/db";
 import { harborSnapshots, observations, type ObservationRow } from "@/db/schema";
 
-const PRIMARY_WAVE_STATION = "45198"; // Chicago Buoy — full wave spectra
 
 // How much an observed local wave buoy leads the NWS gridpoint model when both exist,
 // as a function of the buoy's distance from the harbor: one at the mouth is nearly
@@ -62,12 +61,6 @@ function stormCellFor(harbor: Harbor): { lat: number; lon: number; tz?: string }
   return STORM_CELLS.get(stormCellKey(harbor.lat, harbor.lon)) ?? { lat: harbor.lat, lon: harbor.lon, tz: harbor.timezone };
 }
 
-// Ordered wind fallbacks used when a harbor's own station has no wind (e.g. buoy
-// 45198's anemometer drops out while its wave sensor keeps reporting). All the
-// Chicago stations are within ~10 km, so a neighbor is a fair wind proxy — far
-// better than going dark. CNII2 (Northerly Island) sits next to the downtown
-// harbors, so it leads.
-const WIND_FALLBACK = ["CNII2", "CHII2", "45198", "CMTI2"];
 
 const uniq = (arr: string[]) => Array.from(new Set(arr));
 
