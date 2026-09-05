@@ -5,6 +5,7 @@ import {
   stationUsage,
   summarize,
   DARK_AGE_H,
+  SENSORLESS,
   type HealthColumn,
 } from "./stationHealth";
 import type { BuoyRow } from "./ndbc";
@@ -63,13 +64,38 @@ describe("assessStation", () => {
     expect(r.findings.join(" "), "the report must explain the consequence").toMatch(/exposure model/);
   });
 
-  it("does not flag a sensor the platform never had", () => {
-    // CNII2 is a lakefront met station with no water-temperature probe: 0% across the
-    // whole file forever. Flagging that weekly is how a health report gets ignored.
+  it("does not flag a sensor the platform is DECLARED not to carry", () => {
+    // CNII2 is a lakefront met station with no water-temperature probe. Flagging that
+    // weekly is how a health report gets ignored — but it is exempt because SENSORLESS
+    // says so, never because the data happens to be empty.
     const never = rows(200, 0.1, ["waterTempF"]);
     const r = assessStation("CNII2", never, ["waterTempF"], ["belmont"], NOW);
     expect(r.status).toBe("ok");
     expect(r.absentSensors).toContain("waterTempF");
+    expect(SENSORLESS.CNII2).toContain("waterTempF");
+  });
+
+  it("flags a permanently dead sensor instead of mistaking it for one that never existed", () => {
+    // THE 13 SEPTEMBER BUG. 45198's wind vane died ~35 days ago; once the last working
+    // row scrolls out of the 45-day file, an INFERRED absent-sensor rule would call the
+    // column "not fitted" and mark the station healthy — going silent on the exact
+    // failure this module exists to catch, for a buoy 20 harbors steer by.
+    const allNull = rows(200, 0.1, ["windDir"]); // nothing anywhere in the file
+    const r = assessStation("45198", allNull, WIND, ["belmont"], NOW);
+    expect(r.status, "must not be exempted as 'never had the sensor'").toBe("degraded");
+    expect(r.absentSensors, "45198 is not declared sensorless").not.toContain("windDir");
+    expect(r.findings.join(" ")).toMatch(/not been reported ONCE/);
+    expect(r.findings.join(" "), "says how to silence it legitimately").toMatch(/SENSORLESS/);
+  });
+
+  it("every declared-sensorless entry names a real station and real columns", () => {
+    // A typo here silently exempts nothing, or worse, exempts the wrong column.
+    const valid: HealthColumn[] = ["windDir", "windKt", "gustKt", "waveFt", "waterTempF"];
+    for (const [station, cols] of Object.entries(SENSORLESS)) {
+      expect(station, "ids are compared uppercase").toBe(station.toUpperCase());
+      for (const c of cols) expect(valid).toContain(c);
+      expect(cols, "an entry exempting nothing is a mistake").not.toHaveLength(0);
+    }
   });
 
   it("DOES flag a sensor that used to work and stopped", () => {
@@ -92,7 +118,8 @@ describe("assessStation", () => {
   });
 
   it("is context-aware: a dead column nobody depends on is not a problem", () => {
-    // 45198 reports no water temperature. That only matters if something reads it.
+    // 45198 is not declared sensorless for temp, so the exemption cannot apply; what
+    // decides it here is purely whether a harbor depends on this station for it.
     const unused = assessStation("45198", died(["waterTempF"]), WIND, ["belmont"], NOW);
     expect(unused.status).toBe("ok");
     const used = assessStation("45198", died(["waterTempF"]), ["waterTempF"], ["belmont"], NOW);

@@ -50,6 +50,43 @@ export const MIN_FILL = 0.5;
  *  lower bar before being called broken. */
 export const MIN_FILL_GUST = 0.2;
 
+/**
+ * Sensors a platform physically does not carry, declared per station.
+ *
+ * This exists because capability CANNOT be inferred from the data. The obvious rule —
+ * "a column empty across the whole file means the platform has no such sensor" — is
+ * the same observation as "the sensor died more than 45 days ago", and realtime2 only
+ * holds ~45 days. So an inferred rule quietly flips a dead sensor into a healthy one
+ * the moment the last working row scrolls out of the window, silencing the check on
+ * exactly the failure it exists to catch.
+ *
+ * That is not hypothetical. Measured 2026-09-05: 45198's GST is already 0% across the
+ * entire file (the anemometer's gust output died ~44 days ago) and its WDIR is down to
+ * 13.2% and falling — around 13 September the last real direction row ages out, and an
+ * inferred rule would have started calling a buoy that twenty harbors steer by
+ * "healthy, no wind vane fitted".
+ *
+ * So the default is inverted: an all-null depended-on column is a FAULT unless the
+ * platform is declared here. A new sensorless platform therefore complains until
+ * someone records what it carries, which is the safe direction for a safety check —
+ * the failure mode is a nag, not silence.
+ *
+ * Verified against the full realtime2 files on 2026-09-05.
+ */
+export const SENSORLESS: Record<string, HealthColumn[]> = {
+  // Lakefront/shore met stations — anemometer and air temp only.
+  CHII2: ["waveFt", "waterTempF"],
+  CMTI2: ["waveFt", "waterTempF"],
+  CNII2: ["waveFt", "waterTempF"],
+  FPTM4: ["waveFt", "waterTempF"],
+  // River-mouth met station: no wave sensor, but water temp reads 99%.
+  MNMM4: ["waveFt"],
+  // 45161 reports no waves (this is why Grand Haven/Muskegon/Whitehall use GLOS
+  // Spotters for waves) but DOES carry a water-temp probe at ~98% — the harbors.ts
+  // comments claiming otherwise are wrong.
+  "45161": ["waveFt"],
+};
+
 export type HealthStatus = "ok" | "degraded" | "dark" | "unknown";
 
 export interface StationReport {
@@ -60,9 +97,10 @@ export interface StationReport {
   rowsSampled: number;
   /** Fill rate 0–1 per column over the RECENT WINDOW. */
   fill: Record<HealthColumn, number>;
-  /** Columns this platform has never reported in the whole file — it doesn't carry
-   *  that sensor. CNII2 has no water-temperature probe; that is its design, not a
-   *  fault, and flagging it would train everyone to ignore this report. */
+  /** Columns this platform is DECLARED not to carry (see SENSORLESS). CNII2 has no
+   *  water-temperature probe; that is its design, not a fault, and flagging it would
+   *  train everyone to ignore this report. Declared, never inferred — see the note on
+   *  SENSORLESS for why inference silently breaks. */
   absentSensors: HealthColumn[];
   /** Columns some harbor actually depends on this station for. */
   usedFor: HealthColumn[];
@@ -160,8 +198,11 @@ export function assessStation(
   const fill = Object.fromEntries(
     HEALTH_COLUMNS.map((c) => [c, recent.length ? recent.filter((r) => r[c] != null).length / recent.length : 0]),
   ) as Record<HealthColumn, number>;
-  // Never reported in the entire file ⇒ the platform has no such sensor.
-  const absentSensors = HEALTH_COLUMNS.filter((c) => !rows.some((r) => r[c] != null));
+  // DECLARED absent, not inferred from the data — see SENSORLESS.
+  const absentSensors = SENSORLESS[station.toUpperCase()] ?? [];
+  // Nothing at all in the whole ~45-day file. For an undeclared column this means the
+  // sensor is dead rather than merely intermittent, and it is worth saying so.
+  const neverReported = (c: HealthColumn) => !rows.some((r) => r[c] != null);
 
   const newest = rows.length ? Math.max(...rows.map((r) => r.time)) : null;
   const ageHours = newest == null ? null : (now - newest) / 3600_000;
@@ -182,13 +223,15 @@ export function assessStation(
     );
   } else {
     for (const c of usedFor) {
-      // A sensor the platform never had is not a failure — the app's fallback chains
-      // already cover it, and flagging it weekly would drown the real findings.
+      // A sensor the platform is DECLARED not to carry is not a failure — the app's
+      // fallback chains cover it, and flagging it weekly would drown the real findings.
       if (absentSensors.includes(c)) continue;
       if (fill[c] < minFillFor(c)) {
         status = "degraded";
         findings.push(
-          `${COLUMN_LABEL[c]} reported on ${(fill[c] * 100).toFixed(0)}% of rows in the last ${RECENT_WINDOW_H} h while the feed is fresh — ${COLUMN_CONSEQUENCE[c]}`,
+          neverReported(c)
+            ? `${COLUMN_LABEL[c]} has not been reported ONCE in the whole ~45-day file while the feed is fresh — the sensor is dead, not intermittent. ${COLUMN_CONSEQUENCE[c]}. If this platform never carried one, declare it in SENSORLESS so this stops being reported.`
+            : `${COLUMN_LABEL[c]} reported on ${(fill[c] * 100).toFixed(0)}% of rows in the last ${RECENT_WINDOW_H} h while the feed is fresh — ${COLUMN_CONSEQUENCE[c]}`,
         );
       }
     }
