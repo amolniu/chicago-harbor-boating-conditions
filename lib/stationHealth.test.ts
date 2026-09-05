@@ -143,10 +143,24 @@ describe("stationUsage", () => {
     expect(u.harbors).toContain("belmont");
   });
 
-  it("maps a wave-only buoy to wave columns, not wind", () => {
-    const u = stationUsage().find((s) => s.station === "45187")!;
-    expect(u.columns).toContain("waveFt");
-    expect(u.columns).not.toContain("windKt");
+  it("does not attribute waves to a wind-only station", () => {
+    // CNII2 is a lakefront met station in WIND_FALLBACK with no wave sensor. Columns
+    // must follow the role, or the checker grades a station on data nobody reads.
+    // (The mirror case — a wave-only station — no longer exists: every waveBuoy is
+    // now also somebody's wind source, which is why this asserts the other direction.)
+    const u = stationUsage().find((s) => s.station === "CNII2")!;
+    expect(u.columns).toContain("windKt");
+    expect(u.columns).not.toContain("waveFt");
+  });
+
+  it("drops a station once no harbor references it", () => {
+    // 45199 and MCYI3 were retired on 2026-09-04. A checker that keeps polling
+    // retired stations reports permanent red rows for nothing, which is how the
+    // report trains people to ignore it.
+    const ids = stationUsage().map((s) => s.station);
+    expect(ids).not.toContain("45199");
+    expect(ids).not.toContain("MCYI3");
+    expect(ids, "45187 took over as a wind source").toContain("45187");
   });
 });
 

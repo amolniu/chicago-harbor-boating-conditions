@@ -389,7 +389,15 @@ export const HARBORS: Harbor[] = [
     entranceBearing: 90,
     exposureScale: 0.5,
     exposedDirs: ["NE", "ENE", "E"],
-    buoyStation: "45199",
+    // 45187 (Winthrop Harbor), not 45199: it is 1.6 km off North Point and 10 km from
+    // Southport, against 45199's 19-27 km. 45199 also reports NO gusts at all (0% over
+    // 14 d) and runs a ~38 min irregular cadence that keeps crossing the 3 h staleness
+    // guard, dropping both harbors to CNII2 in Chicago, 70-82 km away.
+    // Validated 2026-09-04 over 14 d hourly-matched: 45187 reads 1.00x Waukegan (45186)
+    // while 45199 reads 1.21x it, so 45199 was the outlier reading HIGH — the swap makes
+    // these harbors more accurate, not more optimistic. Already their waveBuoy, so the
+    // station is fetched every poll regardless.
+    buoyStation: "45187",
     waveBuoy: { station: "45187", km: 10 },
     marineZone: "LMZ646",
     discussionOffice: "MKX",
@@ -409,7 +417,15 @@ export const HARBORS: Harbor[] = [
     entranceBearing: 110,
     exposureScale: 0.5,
     exposedDirs: ["E", "ESE", "NE"],
-    buoyStation: "45199",
+    // 45187 (Winthrop Harbor), not 45199: it is 1.6 km off North Point and 10 km from
+    // Southport, against 45199's 19-27 km. 45199 also reports NO gusts at all (0% over
+    // 14 d) and runs a ~38 min irregular cadence that keeps crossing the 3 h staleness
+    // guard, dropping both harbors to CNII2 in Chicago, 70-82 km away.
+    // Validated 2026-09-04 over 14 d hourly-matched: 45187 reads 1.00x Waukegan (45186)
+    // while 45199 reads 1.21x it, so 45199 was the outlier reading HIGH — the swap makes
+    // these harbors more accurate, not more optimistic. Already their waveBuoy, so the
+    // station is fetched every poll regardless.
+    buoyStation: "45187",
     waveBuoy: { station: "45187", km: 2 },
     marineZone: "LMZ646",
     discussionOffice: "MKX",
@@ -501,7 +517,13 @@ export const HARBORS: Harbor[] = [
     exposureScale: 0.55,
     openWaterBearing: 330,
     exposedDirs: ["NW", "NNW", "N"],
-    buoyStation: "MCYI3",
+    // 45170 (Michigan City Buoy), not MCYI3: MCYI3 went dark 2026-08-18 14:30 UTC, twenty
+    // minutes before CHII2, in the same GLERL outage — and unlike the five harbors fixed
+    // in 0f78c3a this one was missed, so New Buffalo has been taking wind from CNII2 in
+    // Chicago, 72 km across the southern basin, steering an exposure model whose exposed
+    // dirs are NW/NNW/N. 45170 is 22 km out, already this harbor's waveBuoy, live at 100%
+    // on dir/speed/gust, and validated 0.99x against 45026 over 14 d hourly-matched.
+    buoyStation: "45170",
     // MCYI3 reports no waves; 45170 (Michigan City Buoy) does, 19 km offshore.
     waveBuoy: { station: "45170", km: 19 },
     marineZone: "LMZ046",

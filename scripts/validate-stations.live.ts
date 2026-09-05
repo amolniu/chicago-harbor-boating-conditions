@@ -12,6 +12,14 @@
 //
 // It reports a table and fails only on a clear, well-sampled discrepancy, so it can be
 // run periodically without becoming noise.
+//
+// ⚠️ READ THE REFERENCE BEFORE BELIEVING A FAILURE. Sofar Spotters carry no anemometer —
+// their wind is inferred from the wave spectrum and reads 1.1–1.9× a real anemometer
+// (triangulated 2026-09-02 over 14 d: 1.9× below 8 kt, ~1.1× above 15 kt). So an
+// anemometer compared against a Spotter reference lands around 0.5–0.9 while being
+// perfectly healthy. Treat a sub-0.7 ratio against a SPOT-* reference as "look closer",
+// not as proof; confirm against a second NDBC anemometer before re-pointing a harbor.
+// Comparisons against a mirrored NDBC buoy are the trustworthy ones.
 
 import { describe, it } from "vitest";
 import { HARBORS, type Harbor } from "@/lib/harbors";
@@ -142,9 +150,20 @@ describe("station validation (live)", () => {
       const label = h.buoyStation ?? "MODEL";
       const ours = h.buoyStation ? await ndbcWind(h.buoyStation) : await modelWind(h.waveGrid);
 
-      // nearest live GLOS buoy, trying outward until one has data
+      // Nearest live GLOS buoy, trying outward until one has data — but never the
+      // station being validated. GLOS MIRRORS NDBC buoys under the same
+      // org_platform_id (45026, 45170, 45186, 45187 all appear in its catalog), so
+      // without this guard the "independent reference" is the same physical buoy and
+      // every mirrored station passes at ~1.00 no matter how badly it reads. That is
+      // a silent false PASS in the one tool meant to catch a mis-sited station.
       let ref: { p: GlosPlatform; v: number[]; d: number } | null = null;
-      for (const p of buoys.map((p) => ({ p, d: km(h.lat, h.lon, p.lat, p.lon) })).sort((a, b) => a.d - b.d).slice(0, 6)) {
+      const self = new Set([h.buoyStation?.toUpperCase(), h.waveBuoy?.station?.toUpperCase()].filter(Boolean));
+      const candidates = buoys
+        .filter((p) => !self.has((p.pid || "").toUpperCase()))
+        .map((p) => ({ p, d: km(h.lat, h.lon, p.lat, p.lon) }))
+        .sort((a, b) => a.d - b.d)
+        .slice(0, 6);
+      for (const p of candidates) {
         if (p.d > 60) break;
         const v = await glosWind(p.p.id, paramIndex);
         if (v.length) { ref = { p: p.p, v, d: p.d }; break; }
@@ -156,13 +175,21 @@ describe("station validation (live)", () => {
       }
       const a = mean(ours), b = mean(ref.v), ratio = a / b;
       const enough = ours.length >= MIN_SAMPLES && ref.v.length >= MIN_SAMPLES;
-      const under = enough && ratio < RATIO_LOW; // unsafe — fails
+      // A Sofar Spotter reference carries no anemometer and reads 1.1-1.9x a real one,
+      // so a healthy anemometer lands near 0.5-0.9 against it. Flag those for a human
+      // to confirm against a second anemometer, but do not FAIL on them — a check that
+      // cries wolf every run is one nobody reads, which is how the real 0.51x station
+      // would slip through next time.
+      const spotterRef = /^SPOT-/i.test(ref.p.pid || "");
+      const under = enough && ratio < RATIO_LOW && !spotterRef; // unsafe — fails
+      const suspectVsSpotter = enough && ratio < RATIO_LOW && spotterRef;
       const over = enough && ratio > RATIO_HIGH; // conservative — noted only
-      const mark = under ? "!!" : over ? " ~" : "  ";
+      const mark = under ? "!!" : suspectVsSpotter ? " ?" : over ? " ~" : "  ";
       rows.push(
         `  ${mark + h.id.padEnd(18)} ${label.padEnd(12)} ${a.toFixed(1).padStart(5)} kt   vs ${b.toFixed(1).padStart(5)} kt  ` +
         `${ref.p.pid || ref.p.name} (${ref.d.toFixed(0)} km)  ratio ${ratio.toFixed(2)}` +
-        `${enough ? "" : "  [few samples]"}${over ? "  (reads high — conservative)" : ""}`);
+        `${enough ? "" : "  [few samples]"}${over ? "  (reads high — conservative)" : ""}` +
+        `${suspectVsSpotter ? "  (vs a SPOTTER, which reads 1.1-1.9x high — confirm against an anemometer before acting)" : ""}`);
       if (under) problems.push(`${h.id}: ${label} reads ${a.toFixed(1)} kt vs ${b.toFixed(1)} kt at ${ref.p.pid} (${ref.d.toFixed(0)} km) — ratio ${ratio.toFixed(2)}`);
     }
 
