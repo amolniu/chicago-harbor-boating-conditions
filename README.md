@@ -46,9 +46,23 @@ one decision — and signed-in users can watch harbors and set alert thresholds.
 
 ```bash
 npm install
-cp .env.example .env.local   # optional — app runs without any env
+cp .env.example .env         # optional — app runs without any env. NOT .env.local
 npm run dev                  # http://localhost:3000
-npm test                     # rules-engine unit tests (Vitest)
+npm test                     # unit tests (Vitest, offline)
+```
+
+Use `.env`, not `.env.local`. Only `.env` is read by everything that needs it — `next dev`,
+the live scripts and drizzle-kit (via `scripts/load-env.ts`), and the deployed function.
+`.env.local` is loaded by `next dev` alone, so a `DATABASE_URL` placed there appears to work
+locally and then silently does nothing in `npm run backfill:history`, `npm run db:push`, or
+production. Both files are gitignored.
+
+Occasional commands:
+
+```bash
+npm run validate:stations    # live: does each harbor's wind source agree with a neighbour?
+npm run backfill:history     # live: seed ~45 days of snapshots from NDBC/GLOS (needs DATABASE_URL)
+npm run db:push              # apply the Drizzle schema
 ```
 
 No database or API keys are required for local dev — the app runs on live data. History
@@ -84,9 +98,12 @@ app/
   harbor/[id]/page.tsx  full harbor detail
   account/page.tsx      sign in / sign up (Google + email)
   alerts/page.tsx       watch-list + alert thresholds (signed-in)
+  health/page.tsx       station health — an ops page, deliberately not linked from the nav
   api/conditions        current conditions for all harbors
   api/harbor/[id]       detail bundle
+  api/harbor/[id]/history  afternoon summaries the browser re-rates for percentiles
   api/cron/poll         scheduled snapshot (secret-guarded)
+  api/cron/health       station health check (secret-guarded, 200 healthy / 503 needs attention)
 components/     UI (Header, HarborCard, WindChart, HourStrip, ScoreBars, auth, …)
 ```
 
@@ -99,18 +116,52 @@ Deployed via Firebase's web-frameworks integration — SSR runs on a Cloud Funct
 (us-central1) behind a dedicated Hosting site.
 
 ```bash
-firebase deploy --only hosting --project <your-project>          # the app
+npm run deploy                                                   # the app
 firebase deploy --only firestore:rules --project <your-project>  # auth-data rules
 ```
+
+**Deploy with `npm run deploy`, not bare `firebase deploy`.** The wrapper
+(`scripts/deploy.mjs`) exists because the bare command has bitten this project three ways:
+it uploads a stale `.next/dev` (measured at 580 MB — over half the package, and the reason
+deploys took 7+ minutes), it leaves Firebase's 10 s SSR-discovery timeout at a value the
+Next entry intermittently exceeds, and piping its output masks a *failed* deploy as exit 0.
 
 - **Config:** `firebase.json` (hosting `site` + `frameworksBackend`, plus the Firestore rules
   target), `firestore.rules` (own-document-only), Node 20 runtime (`package.json` engines).
 - **Auth (one-time console setup):** enable Authentication + the **Google** and **Email/Password**
   providers, and add your hosting domain to **Authorized Domains**. User data lives in a dedicated
   `sailing` Firestore database.
-- **Optional history:** set `DATABASE_URL` (Neon/Postgres) to persist snapshots; drive the ~15-min
-  poll (`/api/cron/poll`, secret-guarded) with **Cloud Scheduler** or an external pinger.
-- A `vercel.json` is also included if you'd rather deploy to Vercel instead.
+- **Optional history:** set `DATABASE_URL` (Neon/Postgres) to persist snapshots. Both keys live in
+  a gitignored `.env` at the repo root — that one file feeds `next dev`, the tooling, and the
+  deployed function (the deploy copies it in and Firebase turns each key into a Cloud Run env var).
+  `.env.local` is loaded **only** by `next dev` and never reaches production.
+- A `vercel.json` is included if you'd rather deploy to Vercel. Its cron is **daily**, which is a
+  Vercel Hobby limitation rather than the schedule this app wants — on Firebase the poll runs every
+  15 minutes via Cloud Scheduler (below).
+
+### Scheduled jobs (Cloud Scheduler)
+
+Two jobs, both authenticating with `Authorization: Bearer $CRON_SECRET`. Substitute your own
+secret and project.
+
+```bash
+gcloud scheduler jobs create http harbor-poll-15min --project=mootek-consulting --location=us-central1 --schedule="*/15 * * * *" --uri="https://chicago-harbor-sailing.web.app/api/cron/poll" --http-method=GET --headers="Authorization=Bearer $CRON_SECRET" --attempt-deadline=90s --max-retry-attempts=2
+```
+
+```bash
+gcloud scheduler jobs create http harbor-health-weekly --project=mootek-consulting --location=us-central1 --schedule="0 8 * * 1" --time-zone="America/Chicago" --uri="https://chicago-harbor-sailing.web.app/api/cron/health" --http-method=GET --headers="Authorization=Bearer $CRON_SECRET" --attempt-deadline=90s --max-retry-attempts=0
+```
+
+- **`/api/cron/poll`** — snapshots all harbors. Retries make sense here: a missed run is a
+  permanent hole in the history.
+- **`/api/cron/health`** — station health (see `/health`). Returns **200 healthy / 503
+  needs-attention**, so a failed job in the console *is* the alert. Retries are **0** on purpose:
+  a 503 is a determination, not a transient error, and the stations will not be healthier in
+  sixty seconds.
+- ⚠️ After creating or rotating either job, **verify the header matches `.env`**. A job created
+  with the wrong secret 401s silently every run while the site looks perfectly healthy — that
+  happened here, and the poll went nowhere until it was caught by comparing hashes.
+- `attempt-deadline` above 90 s buys nothing: Firebase Hosting hard-caps a proxied request at 60 s.
 
 ## Caveats & roadmap
 
