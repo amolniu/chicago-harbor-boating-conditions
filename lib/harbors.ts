@@ -587,7 +587,10 @@ export const HARBORS: Harbor[] = [
     openWaterBearing: 285,
     exposedDirs: ["W", "WNW"],
     buoyStation: "45161",
-    // 45161 has no wave or temp sensor, so the Grand Haven Spotter (GLOS) supplies both.
+    // 45161 reports no WAVES (WVHT blank on every row), so the Grand Haven Spotter
+    // supplies them. It DOES carry a water-temp probe (~98% fill, verified 2026-09-05) —
+    // earlier comments here claiming otherwise were wrong. The Spotter still leads for
+    // temp because it sits 8 km off this harbor while 45161 is a shared regional buoy.
     // Spotters are seasonal — when it's pulled for winter this falls back to the model.
     waveBuoy: { km: 8, glos: { datasetId: 671, waveId: 9494, periodId: 9501, dirId: 9495, tempId: 9491 } },
     marineZone: "LMZ847",
@@ -611,7 +614,8 @@ export const HARBORS: Harbor[] = [
     openWaterBearing: 285,
     exposedDirs: ["W", "WNW"],
     buoyStation: "45161",
-    // 45161 has no wave or temp sensor; the Muskegon Spotter sits 9 km out, effectively
+    // 45161 reports no waves (it does carry water temp, ~98%); the Muskegon Spotter
+    // sits 9 km out, effectively
     // co-located with it, and cross-validates at 0.92x the Grand Haven Spotter.
     waveBuoy: { km: 9, glos: { datasetId: 274, waveId: 5122, periodId: 5128, dirId: 5123, tempId: 5239 } },
     marineZone: "LMZ847",
@@ -635,7 +639,8 @@ export const HARBORS: Harbor[] = [
     openWaterBearing: 285,
     exposedDirs: ["W", "WNW"],
     buoyStation: "45161",
-    // As at Grand Haven: 45161 carries no waves or temp, so the Whitehall Spotter does.
+    // As at Grand Haven: 45161 carries no waves (temp yes, ~98%), so the Whitehall
+    // Spotter leads for both.
     waveBuoy: { km: 12, glos: { datasetId: 672, waveId: 9520, periodId: 9527, dirId: 9521, tempId: 9517 } },
     marineZone: "LMZ848",
     discussionOffice: "GRR",
@@ -732,7 +737,11 @@ waveBuoy: { km: 9, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId
     exposureScale: 0.15,
     openWaterBearing: 250,
     exposedDirs: ["W", "WSW", "SW"],
-    buoyStation: "FPTM4", // Fairport (~11 km); reports intermittently, model covers the gaps
+    // Fairport (~11 km). Currently healthy — ~98% wind fill at a flat 10-min cadence
+    // (2026-09-05) — but its file history shows gaps of up to ~20 days, which is why
+    // windFromGrid stays set: the model fills the blackouts rather than the harbor going
+    // dark. Do not read the windFromGrid flag as "this station is unreliable right now".
+    buoyStation: "FPTM4",
     windFromGrid: true,
     marineZone: "LMZ221",
     discussionOffice: "MQT",

@@ -215,8 +215,8 @@ export function assemble(
     waveDir,
     // Water temp, nearest source first. The wider dataChain ends in the Chicago
     // neighbours, so a GLOS platform a few km offshore must be consulted BEFORE it —
-    // otherwise a Michigan harbor whose own buoy has no temp sensor (45161) would
-    // report Lake Michigan's far side, 150 km away.
+    // otherwise a Michigan harbor would report Lake Michigan's far side, 150 km away.
+    // (45161 does carry a temp probe; the Spotters simply sit far closer to the harbors.)
     // waveBuoy (NDBC or GLOS) is by definition the closest local source, so it leads;
     // then the harbor's own station; then the wider chain.
     waterTempF:

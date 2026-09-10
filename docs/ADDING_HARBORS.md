@@ -13,7 +13,7 @@ Michigan harbors (St. Joseph, New Buffalo) are worked examples in `lib/harbors.t
 |---|---|---|
 | `id`, `name`, `lat`, `lon` | identity + location | the marina's coordinates |
 | `buoyStation?` | NDBC station for **live wind + temp** | nearest station with a `realtime2` feed (step 2). Omit for buoy-less harbors (set `windFromGrid`) |
-| `windFromGrid?` | take live wind from the **gridpoint model** instead of a buoy | `true` when no usable wind buoy exists nearby (e.g. Green Bay). Waves still come from `waveGrid`; water temp is left blank |
+| `windFromGrid?` | **fall back** to the gridpoint model when no buoy reading is available | `true` when no usable wind buoy exists nearby (e.g. Green Bay), or when the only nearby station reports intermittently — a fresh `buoyStation` always wins, so setting both is correct. Waves still come from `waveGrid`; water temp is blank only if no `waveBuoy` supplies it |
 | `waveBuoy?` | `{ station, km }` — a wave buoy right off the harbor + its distance | optional — a buoy closer than `buoyStation` for waves; its **observed** wave is blended with the gridpoint model, weighted by `km` (closer ⇒ more weight). Often a wave-only buoy like `45186`/`45187` (step 2) |
 | `marineZone` | NWS nearshore zone (advisories, wave text) | from the point lookup (step 1) — e.g. `LMZ043` |
 | `waveGrid` | NWS gridpoint `OFFICE/x,y` for **per-harbor waves + marine wind** | from the point lookup (step 1) — e.g. `IWX/19,82` |
@@ -57,19 +57,32 @@ Look up NDBC stations near the harbor (ndbc.noaa.gov map, or search). A station 
 usable here only if it has a **`realtime2` text feed** with wind (`WDIR`/`WSPD`):
 
 ```bash
-curl -s "https://www.ndbc.noaa.gov/data/realtime2/45170.txt" | sed -n '1p;3p'
+curl -s "https://www.ndbc.noaa.gov/data/realtime2/45170.txt" | awk 'NR>2 {n++; if($6!="MM")d++; if($7!="MM")s++; if($8!="MM")g++; if($9!="MM")w++; if($15!="MM")t++} END {print "rows " n " | dir " int(100*d/n) "% spd " int(100*s/n) "% gst " int(100*g/n) "% wave " int(100*w/n) "% temp " int(100*t/n) "%"}'
 ```
 
-- Row present with real `WDIR WSPD` numbers → usable → set `buoyStation`.
+**Check every COLUMN, not just that a row exists.** Looking at one recent row is how
+45198 passed inspection while its wind vane had been dead for a month: it reported
+`WSPD` on every row and `WDIR` on none, which silently disabled the exposure model for
+twenty harbors. A station is not simply up or down — it can lose one sensor and keep
+the rest, and that failure is quieter than an outage because nothing looks wrong.
+
+- High fill on the columns you need (dir/spd near 100%) → usable → set `buoyStation`.
+  A column at 0% means that sensor is dead or absent; decide whether the app depends on it.
 - `404` (e.g. some CO-OPS stations like `SJOM4`) → pick another (an offshore `45xxx`
   buoy, or the nearest GLERL met station like `MCYI3`).
 - No waves in the buoy (`WVHT = MM`) is fine — waves come from `waveGrid`.
 - **No usable buoy at all?** Some regions (e.g. Green Bay / the Bays de Noc) have only
   GLOS stations that lack a `realtime2` feed (they 404), and the nearest real buoy is
   far away in a different water body. In that case omit `buoyStation` and set
-  **`windFromGrid: true`** — live wind then comes from the harbor's own NWS gridpoint
-  model (the same source as the wind forecast). Waves still come from `waveGrid`; water
-  temp and the buoy wind-history graph are simply blank (no local observed source).
+  **`windFromGrid: true`** — the harbor's own NWS gridpoint model then fills in. It is a
+  **fallback, not an override**: a fresh `buoyStation` reading always wins, so it is safe
+  to set both (Menominee and Fayette do — their stations vanish for weeks at a time).
+  Waves still come from `waveGrid`. Water temp is blank only if nothing else supplies it —
+  a GLOS `waveBuoy` with a `tempId` covers it, which is how the Bays de Noc get theirs.
+
+  Be aware the gridpoint model **under-reads over narrow water**: on Green Bay it measured
+  0.72x a same-site anemometer, which is the optimistic direction. Where a validated Spotter
+  exists, prefer it (see the GLOS section).
 - The reverse also happens: a **wave-only** buoy (`WDIR`/`WSPD` always `MM`, `WVHT`
   present — e.g. `45186` Waukegan, `45187` Winthrop Harbor) can't drive wind, but if it
   sits right off the harbor, set it as **`waveBuoy: { station, km }`** so its observed
@@ -175,6 +188,22 @@ so it is opt-in and never runs in `npm test`.
 
 It has already caught two shipped mistakes: `KWNW3` at Kewaunee (0.51×) and `CMTI2` at
 the three south-side Chicago harbors (0.65× — a gauge inside sheltered Calumet Harbor).
+
+**Reading the output (both traps were live until 2026-09-05):**
+
+- A `?` row means the reference was a **Sofar Spotter**, which carries no anemometer —
+  its wind is inferred from the wave spectrum and reads 1.1–1.9× a real one. A healthy
+  anemometer lands at 0.5–0.9 against a Spotter, so that is a "look closer", not a fault.
+  Confirm against a second NDBC anemometer before re-pointing anything.
+- A `!!` row is a genuine failure: the reference was another anemometer.
+- Until 2026-09-05 the script could pick **the GLOS mirror of the station under test**
+  (GLOS republishes NDBC buoys under the same id) and compare it against itself, passing
+  it at ~1.00 no matter how badly it read. Any "validated" claim from before that date on
+  a mirrored station is worthless — re-run it.
+
+Then load **`/health`** and confirm the new station shows no red columns. The validator
+answers "does it agree with its neighbours?"; `/health` answers "is every column we read
+still reporting?" — you want both.
 
 ## Optional — a GLOS wave source
 
