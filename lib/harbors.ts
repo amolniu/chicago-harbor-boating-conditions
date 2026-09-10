@@ -133,6 +133,24 @@ export function exposureForWind(harbor: Harbor, windDir: number): number {
 }
 
 /**
+ * The worst exposure this harbor can suffer from ANY direction.
+ *
+ * Used when the wind bearing is unknown, so the rating can assume the worst geometry
+ * instead of silently skipping the exposure model. Per-harbor rather than the 1.3
+ * clamp ceiling, because a well-sheltered basin cannot reach 1.3 from any bearing and
+ * assuming it could would manufacture caution that the geometry rules out.
+ *
+ * Cheap and pure: sixteen evaluations of a trig-free interpolation, and callers run it
+ * once per rating. The 16-point sweep matches the resolution of the sector modifiers —
+ * shelteredDirs/exposedDirs are compass sectors, so the maximum always lands on one.
+ */
+export function maxExposure(harbor: Harbor): number {
+  let worst = 0;
+  for (let i = 0; i < 16; i++) worst = Math.max(worst, exposureForWind(harbor, i * 22.5));
+  return worst;
+}
+
+/**
  * Crosswind component (kt) across the entrance channel — the thing that makes
  * threading a breakwater gap or docking hard. Max when wind is perpendicular to
  * the exit heading, zero when it's a straight head/tailwind.

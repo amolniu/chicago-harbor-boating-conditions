@@ -7,7 +7,7 @@
 // so it can be unit-tested. See lib/rating.test.ts.
 
 import { Advisory, Conditions, Rating, Status, StormRisk } from "./types";
-import { Harbor, exposureForWind, crosswindKt } from "./harbors";
+import { Harbor, exposureForWind, crosswindKt, maxExposure } from "./harbors";
 import { BoatProfile, Skill, skillFactor } from "./boats";
 import { degToCompass } from "./units";
 import { worstAlertLevel, type AlertLevel } from "./alerts";
@@ -105,14 +105,42 @@ export function rate(
 
   if (c.waveFt != null) {
     open.push({ key: "openWave", label: "open-lake waves", score: scoreMetric(c.waveFt, waveCalm, waveMax) });
-    if (c.windDir != null) {
+  }
+
+  if (c.windDir != null) {
+    if (c.waveFt != null) {
       exitWaveFt = c.waveFt * exposureForWind(harbor, c.windDir);
       exit.push({ key: "exitWave", label: "exit waves", score: scoreMetric(exitWaveFt, waveCalm, waveMax) });
     }
-  }
-  if (c.windDir != null) {
     crossKt = crosswindKt(harbor, c.windDir, c.windKt);
     exit.push({ key: "crosswind", label: "entrance crosswind", score: scoreMetric(crossKt, crossCalm, crossMax) });
+  } else {
+    // No bearing ⇒ the exposure model cannot run. Both exit metrics need to know where
+    // the wind is FROM: they are the whole difference between Belmont and Burnham in the
+    // same blow. Previously they were simply skipped, which collapsed exitScore to the
+    // wind score — a confident-looking "your exit is fine", in the optimistic direction,
+    // and invisible because the UI still drew a full exit bar next to a fresh timestamp.
+    // This is not theoretical: 45198 lost its wind vane for weeks while still reporting
+    // speed, and every Chicago harbor rated without an exposure model until it was found.
+    //
+    // So assume the WORST geometry the harbor allows rather than the best. A calm day
+    // still scores 100 either way, so this adds no false caution; it only bites when the
+    // unknown direction could genuinely change the answer.
+    if (c.waveFt != null) {
+      exitWaveFt = c.waveFt * maxExposure(harbor);
+      exit.push({
+        key: "exitWaveNoDir",
+        label: "exit waves (wind direction unknown)",
+        score: scoreMetric(exitWaveFt, waveCalm, waveMax),
+      });
+    }
+    // Worst case is wind square across the entrance: |sin| = 1, so the full speed.
+    crossKt = c.windKt;
+    exit.push({
+      key: "crosswindNoDir",
+      label: "entrance crosswind (wind direction unknown)",
+      score: scoreMetric(crossKt, crossCalm, crossMax),
+    });
   }
 
   // An advisory is an open-lake condition, so it enters as a metric on the open
@@ -208,6 +236,12 @@ function buildReason(
       return `${scPrefix}${dir} wind is stacking ~${(v.exitWaveFt ?? 0).toFixed(1)} ft right at ${harbor.name}'s entrance — the exit is the crux.`;
     case "crosswind":
       return `${scPrefix}${Math.round(v.crossKt ?? 0)} kt of crosswind across the mouth — docking and threading the gap will be tricky.`;
+    // Direction is missing, so these numbers are the WORST the geometry allows, not a
+    // measurement. Say so plainly rather than asserting a figure we cannot know.
+    case "exitWaveNoDir":
+      return `${scPrefix}No wind direction available, so ${harbor.name}'s entrance can't be read — worst case it stacks ~${(v.exitWaveFt ?? 0).toFixed(1)} ft at the mouth. Treat the exit as the unknown.`;
+    case "crosswindNoDir":
+      return `${scPrefix}No wind direction available — worst case is the full ${Math.round(v.crossKt ?? 0)} kt straight across the entrance. Treat the exit as the unknown.`;
     case "openWave":
       return `${scPrefix}${(c.waveFt ?? 0).toFixed(1)} ft chop out on the open lake${c.wavePeriodS ? ` at a short ${Math.round(c.wavePeriodS)} s period` : ""} — rough ride.`;
     case "wind":

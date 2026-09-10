@@ -106,24 +106,47 @@ describe("wind field fallback (a station can lose one sensor and keep another)",
     expect(c.source).toBe("45198");
   });
 
-  it("without a direction the rating turns OPTIMISTIC — the dangerous direction", () => {
-    // The point of the fallback. In a real NE blow, Belmont's exposed entrance is the
-    // hazard; with no windDir, exitWave and crosswind are skipped entirely and the
-    // rating reports only open-lake comfort — hiding exactly what the app exists to warn about.
-    const rough = { ...GRID, waveFt: 4, windKt: 18, gustKt: 22, windDir: 45 };
-    const neNeighbour = buoy("CNII2", { windKt: 18, windDir: 45, gustKt: 22 });
-    const withDir = assemble(bel, new Map([["45198", buoy("45198", { windKt: 18 })], ["CNII2", neNeighbour]]), rough, "none", undefined);
-    const blind = assemble(bel, new Map([["45198", buoy("45198", { windKt: 18 })]]), { ...rough, windDir: null }, "none", undefined);
-
-    expect(withDir.windDir).toBe(45);
-    expect(blind.windDir).toBeNull(); // no station and no model direction
-
+  it("a missing direction can never rate BETTER than the truth, whatever the truth is", () => {
+    // Why conditions.ts borrows a direction at all. Without one, rating.ts cannot run
+    // the exposure model, so it assumes the worst geometry the harbor allows. That must
+    // hold against EVERY possible real bearing, not just a convenient one: if a blind
+    // rating could ever outscore the true rating, a dead wind vane would quietly make a
+    // harbor look safer than it is — the direction this app must never fail in.
+    const rough = { ...GRID, waveFt: 4, windKt: 18, gustKt: 22 };
     const boat = getBoat("catalina30");
-    const seeing = rate(bel, withDir, boat, "intermediate");
-    const flying = rate(bel, blind, boat, "intermediate");
-    expect(seeing.exitScore).toBeLessThan(flying.exitScore);
-    expect(seeing.score).toBeLessThan(flying.score);
+    const blind = rate(bel, assemble(bel, new Map([["45198", buoy("45198", { windKt: 18 })]]),
+      { ...rough, windDir: null }, "none", undefined), boat, "intermediate");
+
+    for (let deg = 0; deg < 360; deg += 22.5) {
+      const seeing = rate(
+        bel,
+        assemble(bel, new Map([["45198", buoy("45198", { windKt: 18, windDir: deg })]]), rough, "none", undefined),
+        boat,
+        "intermediate",
+      );
+      expect(blind.score, `blind must not beat a ${deg}-degree wind`).toBeLessThanOrEqual(seeing.score);
+      expect(blind.exitScore, `exit at ${deg} degrees`).toBeLessThanOrEqual(seeing.exitScore);
+    }
   });
+
+  it("says plainly that the exit could not be read, rather than asserting a number", () => {
+    const rough = { ...GRID, waveFt: 4, windKt: 18, gustKt: 22, windDir: null };
+    const blind = rate(bel, assemble(bel, new Map([["45198", buoy("45198", { windKt: 18 })]]), rough, "none", undefined),
+      getBoat("catalina30"), "intermediate");
+    expect(blind.reason).toMatch(/no wind direction available/i);
+    expect(blind.reason, "names the uncertainty, not a measured figure").toMatch(/worst case/i);
+  });
+
+  it("adds no false caution on a calm day", () => {
+    // The worst-case assumption must not turn a flat, windless afternoon yellow: if
+    // every metric is comfortably inside the boat's limits, direction cannot change it.
+    const calm = { ...GRID, waveFt: 0.4, windKt: 5, gustKt: 6, windDir: null };
+    const r = rate(bel, assemble(bel, new Map([["45198", buoy("45198", { windKt: 5 })]]), calm, "none", undefined),
+      getBoat("catalina30"), "intermediate");
+    expect(r.status).toBe("green");
+    expect(r.score).toBe(100);
+  });
+
 
   it("falls back to the model's direction when no station has one", () => {
     const c = assemble(bel, new Map([["45198", speedOnly]]), GRID, "none", undefined);
