@@ -120,9 +120,13 @@ export function assemble(
   // Direction and gust resolve DOWN THE CHAIN INDEPENDENTLY of speed, because a buoy
   // can lose one sensor and keep another: 45198 (Chicago Buoy) currently reports speed
   // on every row and WDIR/GST on none. Taking direction only from the speed station
-  // left all ten Chicago harbors with windDir === null, which silently disables the
-  // exposure model — exitWave and crosswind are skipped without a direction, so the
-  // harbor-exit half of the rating, the thing this app exists for, quietly vanished.
+  // left all ten Chicago harbors with windDir === null, which disabled the exposure model:
+  // at the time exitWave and crosswind were simply SKIPPED without a bearing, so the
+  // harbor-exit half of the rating — the thing this app exists for — quietly vanished, and
+  // scores read optimistically. rate() no longer skips them (it substitutes the harbor's
+  // worst-case geometry instead, see 9ae26c4), so a null bearing is now merely pessimistic
+  // rather than dangerous — but borrowing a real one keeps the harbors distinguishable,
+  // which is the whole point.
   // Borrowing a direction from a neighbour ~10 km away is a far better approximation
   // than having none; the lake's wind field is coherent at that scale.
   const dirPick = pickField(buoys, windChain, "windDir");

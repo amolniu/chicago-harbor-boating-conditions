@@ -140,13 +140,31 @@ export function exposureForWind(harbor: Harbor, windDir: number): number {
  * clamp ceiling, because a well-sheltered basin cannot reach 1.3 from any bearing and
  * assuming it could would manufacture caution that the geometry rules out.
  *
- * Cheap and pure: sixteen evaluations of a trig-free interpolation, and callers run it
- * once per rating. The 16-point sweep matches the resolution of the sector modifiers —
- * shelteredDirs/exposedDirs are compass sectors, so the maximum always lands on one.
+ * ⚠️ Sampling the sixteen compass points is NOT enough, though it looks like it should
+ * be. `interpFetch` interpolates between sector CENTRES, while `degToCompass` switches
+ * the ×1.4 / ×0.4 modifier at sector BOUNDARIES (centre ± 11.25°). The product therefore
+ * peaks where the modifier flips onto the rising flank of the fetch curve — at an edge
+ * the 16-point sweep never samples. Measured when this was a 16-point sweep: Montrose
+ * read 0.735 against a true 0.784 at 123.8° (a boundary), Burnham 0.383 vs 0.405, 31st
+ * 0.798 vs 0.819 — all three harbors with `exposedDirs` on a rising flank, and all three
+ * under-reporting the worst case, which is the optimistic direction.
+ *
+ * So sweep finely. Memoised because a harbor's geometry is static config: this runs once
+ * per harbor for the life of the process, which makes it cheaper than the old per-call
+ * 16-point loop as well as correct.
  */
+const MAX_EXPOSURE_STEP_DEG = 0.25;
+const maxExposureCache = new Map<string, number>();
+
 export function maxExposure(harbor: Harbor): number {
+  const hit = maxExposureCache.get(harbor.id);
+  if (hit !== undefined) return hit;
   let worst = 0;
-  for (let i = 0; i < 16; i++) worst = Math.max(worst, exposureForWind(harbor, i * 22.5));
+  for (let d = 0; d < 360; d += MAX_EXPOSURE_STEP_DEG) {
+    const e = exposureForWind(harbor, d);
+    if (e > worst) worst = e;
+  }
+  maxExposureCache.set(harbor.id, worst);
   return worst;
 }
 

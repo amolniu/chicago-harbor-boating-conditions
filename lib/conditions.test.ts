@@ -117,7 +117,11 @@ describe("wind field fallback (a station can lose one sensor and keep another)",
     const blind = rate(bel, assemble(bel, new Map([["45198", buoy("45198", { windKt: 18 })]]),
       { ...rough, windDir: null }, "none", undefined), boat, "intermediate");
 
-    for (let deg = 0; deg < 360; deg += 22.5) {
+    // Step by a value that is NOT a multiple of 22.5. Stepping the compass points meant
+    // testing exactly the bearings maxExposure() sampled, so the test could not see that
+    // the true worst case sits at a sector BOUNDARY between them — it passed while blind
+    // exit scores ran up to 15 points optimistic at real off-node bearings.
+    for (let deg = 0; deg < 360; deg += 3.7) {
       const seeing = rate(
         bel,
         assemble(bel, new Map([["45198", buoy("45198", { windKt: 18, windDir: deg })]]), rough, "none", undefined),

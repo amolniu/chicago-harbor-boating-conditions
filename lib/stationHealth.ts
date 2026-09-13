@@ -123,7 +123,13 @@ const COLUMN_LABEL: Record<HealthColumn, string> = {
 /** Why a dead column matters, so the report explains itself without the reader
  *  having to know the rating engine. */
 const COLUMN_CONSEQUENCE: Record<HealthColumn, string> = {
-  windDir: "the exposure model can't run — exit waves and crosswind are skipped, making scores optimistic",
+  // Accurate as of 9ae26c4: the exit metrics are no longer SKIPPED without a bearing —
+  // rate() substitutes the harbor's worst-case geometry — so the bias is pessimistic, not
+  // optimistic. Still worth fixing: every harbor collapses to its own worst case, which is
+  // precisely the differentiation this product exists to provide.
+  windDir:
+    "the exposure model can't run — the rating falls back to this harbor's worst-case geometry, " +
+    "so scores read pessimistically and stop telling harbors apart",
   windKt: "the harbor can't be rated at all",
   gustKt: "gust-driven scores read low, so squally days look calmer than they are",
   waveFt: "waves fall back to the model, losing the observed blend",
