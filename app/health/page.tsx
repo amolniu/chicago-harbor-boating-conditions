@@ -44,7 +44,7 @@ export default async function HealthPage() {
       </div>
 
       <p className="mt-2 max-w-[70ch] text-sm text-muted">
-        Every NDBC station the app reads, and whether each column it depends on is actually reporting. A
+        Every source the app reads — NDBC buoys and GLOS Sofar Spotters — and whether each column it depends on is actually reporting. A
         station can be fresh and still have a dead sensor — that failure is quieter than an outage and
         can silently change what the ratings say.
       </p>
@@ -64,7 +64,7 @@ export default async function HealthPage() {
                 <li key={p.station} className="rounded-lg border border-line-soft bg-raised p-3">
                   <div className="flex items-center gap-2">
                     <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${META[p.status].dot}`} />
-                    <span className="font-mono font-semibold text-strong">{p.station}</span>
+                    <span className="font-mono font-semibold text-strong">{p.label}</span>
                     <span className={`text-xs font-semibold ${META[p.status].text}`}>{META[p.status].label}</span>
                     <span className="text-xs text-faint">
                       {p.usedBy.length} harbor{p.usedBy.length === 1 ? "" : "s"}
@@ -100,7 +100,17 @@ export default async function HealthPage() {
             <tbody>
               {s.stations.map((st) => (
                 <tr key={st.station} className="border-t border-line-soft">
-                  <td className="py-2 pr-3 font-mono text-strong">{st.station}</td>
+                  <td className="py-2 pr-3 font-mono text-strong">
+                    {st.label}
+                    {st.kind === "glos" && (
+                      <span
+                        title="GLOS Sofar Spotter — seasonal, and pulled for the winter"
+                        className="ml-1.5 rounded bg-sunken px-1 py-0.5 font-sans text-[10px] uppercase tracking-wide text-faint"
+                      >
+                        spotter
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2 pr-3">
                     <span className="inline-flex items-center gap-1.5">
                       <span className={`h-2 w-2 rounded-full ${META[st.status].dot}`} />

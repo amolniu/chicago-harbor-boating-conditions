@@ -24,6 +24,7 @@
 
 import type { BuoyRow } from "./ndbc";
 import { HARBORS, WIND_FALLBACK, PRIMARY_WAVE_STATION } from "./harbors";
+import type { GlosWaveRef } from "./glos";
 
 /** The fields the app actually consumes from a station. */
 export type HealthColumn = "windDir" | "windKt" | "gustKt" | "waveFt" | "waterTempF";
@@ -87,10 +88,16 @@ export const SENSORLESS: Record<string, HealthColumn[]> = {
   "45161": ["waveFt"],
 };
 
+export type SourceKind = "ndbc" | "glos";
+
 export type HealthStatus = "ok" | "degraded" | "dark" | "unknown";
 
 export interface StationReport {
   station: string;
+  /** Where this source comes from — the two are fetched differently but graded alike. */
+  kind: SourceKind;
+  /** Friendly name for display ("Bay de Noc Spotter"); falls back to the id. */
+  label: string;
   /** Age of the newest row, hours. Null when the feed returned nothing at all. */
   ageHours: number | null;
   /** Rows inside the recent window — the denominator behind `fill`. */
@@ -137,7 +144,14 @@ const COLUMN_CONSEQUENCE: Record<HealthColumn, string> = {
 };
 
 export interface StationUsage {
+  /** Display id: an NDBC station id, or `glos:<datasetId>` for a Spotter. */
   station: string;
+  /** NDBC buoys and GLOS Spotters are fetched differently but graded identically. */
+  kind: "ndbc" | "glos";
+  /** Set for GLOS sources, so the caller knows which platform and series to fetch. */
+  glos?: GlosWaveRef;
+  /** Human label for a GLOS platform (e.g. "Bay de Noc Spotter"). */
+  label?: string;
   columns: HealthColumn[];
   harbors: string[];
 }
@@ -177,11 +191,45 @@ export function stationUsage(): StationUsage[] {
     }
   }
 
-  return Array.from(acc, ([station, g]) => ({
+  // GLOS Spotters, as their own source kind. They were invisible to this check until
+  // 2026-09-13 even though six harbors take their waves from one and Escanaba and
+  // Gladstone take their LIVE WIND from the Bay de Noc Spotter — so a Spotter could go
+  // dark and /health would stay green while two harbors dropped to a gridpoint model
+  // that reads 0.72x a same-site anemometer. Keyed by datasetId, because one platform
+  // legitimately serves several harbors (695 covers both Escanaba and Gladstone).
+  const glosAcc = new Map<number, { ref: GlosWaveRef; columns: Set<HealthColumn>; harbors: Set<string> }>();
+  for (const h of HARBORS) {
+    const ref = h.waveBuoy?.glos;
+    if (!ref) continue;
+    const g =
+      glosAcc.get(ref.datasetId) ?? { ref, columns: new Set<HealthColumn>(), harbors: new Set<string>() };
+    // Only the series this platform actually declares — a ref without tempId is not
+    // expected to report temperature, so it must not be graded on it.
+    if (ref.waveId != null) g.columns.add("waveFt");
+    if (ref.tempId != null) g.columns.add("waterTempF");
+    // Spotters report SPEED only, never a bearing, so windDir is deliberately absent.
+    if (ref.windId != null) g.columns.add("windKt");
+    g.harbors.add(h.id);
+    glosAcc.set(ref.datasetId, g);
+  }
+
+  const ndbc: StationUsage[] = Array.from(acc, ([station, g]) => ({
     station,
+    kind: "ndbc" as const,
     columns: HEALTH_COLUMNS.filter((c) => g.columns.has(c)),
     harbors: Array.from(g.harbors).sort(),
-  })).sort((a, b) => a.station.localeCompare(b.station));
+  }));
+
+  const glos: StationUsage[] = Array.from(glosAcc, ([datasetId, g]) => ({
+    station: `glos:${datasetId}`,
+    kind: "glos" as const,
+    glos: g.ref,
+    label: g.ref.label ?? `GLOS ${datasetId}`,
+    columns: HEALTH_COLUMNS.filter((c) => g.columns.has(c)),
+    harbors: Array.from(g.harbors).sort(),
+  }));
+
+  return [...ndbc, ...glos].sort((a, b) => a.station.localeCompare(b.station));
 }
 
 /**
@@ -199,7 +247,10 @@ export function assessStation(
   usedFor: HealthColumn[],
   usedBy: string[],
   now: number = Date.now(),
+  opts: { kind?: SourceKind; label?: string } = {},
 ): StationReport {
+  const kind: SourceKind = opts.kind ?? "ndbc";
+  const displayName = opts.label ?? station;
   const recent = rows.filter((r) => now - r.time <= RECENT_WINDOW_H * 3600_000);
   const fill = Object.fromEntries(
     HEALTH_COLUMNS.map((c) => [c, recent.length ? recent.filter((r) => r[c] != null).length / recent.length : 0]),
@@ -221,12 +272,27 @@ export function assessStation(
     findings.push("no data returned — the feed is unreachable or the station id is wrong");
   } else if (ageHours != null && ageHours > DARK_AGE_H) {
     status = "dark";
-    findings.push(
-      `no rows for ${ageHours < 48 ? `${ageHours.toFixed(0)} h` : `${(ageHours / 24).toFixed(0)} days`} — whole-station outage` +
-        (usedBy.length
-          ? `; ${usedBy.length} harbor${usedBy.length === 1 ? " falls" : "s fall"} back to a neighbour, so live conditions look fine while history freezes`
-          : ""),
-    );
+    const age = ageHours < 48 ? `${ageHours.toFixed(0)} h` : `${(ageHours / 24).toFixed(0)} days`;
+    const nHarbors = `${usedBy.length} harbor${usedBy.length === 1 ? "" : "s"}`;
+    if (kind === "glos") {
+      // Spotters are pulled for the winter, so a dark one is often expected rather than
+      // broken — say so, or this report turns permanently red every autumn and stops
+      // being read. What matters is WHAT it was feeding, which the next line spells out.
+      findings.push(
+        `${displayName} has no rows for ${age}. Spotters are seasonal and get pulled for the winter, ` +
+          `so this may be normal — but ${nHarbors} rely on it` +
+          (usedFor.includes("windKt")
+            ? `, and it is their live WIND source: they now fall back to the gridpoint model, which measured 0.72× a same-site anemometer. That under-reads, which is the optimistic direction.`
+            : ` for waves/temperature, which fall back to the gridpoint model.`),
+      );
+    } else {
+      findings.push(
+        `no rows for ${age} — whole-station outage` +
+          (usedBy.length
+            ? `; ${nHarbors} fall${usedBy.length === 1 ? "s" : ""} back to a neighbour, so live conditions look fine while history freezes`
+            : ""),
+      );
+    }
   } else {
     for (const c of usedFor) {
       // A sensor the platform is DECLARED not to carry is not a failure — the app's
@@ -243,7 +309,7 @@ export function assessStation(
     }
   }
 
-  return { station, ageHours, rowsSampled: recent.length, fill, absentSensors, usedFor, usedBy, status, findings };
+  return { station, kind, label: displayName, ageHours, rowsSampled: recent.length, fill, absentSensors, usedFor, usedBy, status, findings };
 }
 
 /** Comparison of a station's wind against a reference, for drift detection. */
@@ -357,6 +423,18 @@ export function summarize(stations: StationReport[], drift: DriftReport[], check
     driftProblems,
     // "unknown" and "over" are reported but don't fail the check — a transient fetch
     // failure or a conservative reading shouldn't cry wolf every week.
-    ok: !problems.some((p) => p.status === "dark" || p.status === "degraded") && !driftProblems.some((d) => d.status === "under"),
+    //
+    // A quiet GLOS Spotter fails the run ONLY when it supplies wind. Spotters are pulled
+    // for the winter, so failing on every dark one would paint this report red for months
+    // and teach everyone to ignore it — and a lost wave/temp Spotter degrades to the
+    // gridpoint, a documented and acceptable path. Losing the Bay de Noc Spotter's WIND
+    // is different: Escanaba and Gladstone fall back to a model that reads 0.72× a
+    // same-site anemometer, i.e. optimistic, which is the direction that hurts people.
+    ok:
+      !problems.some(
+        (p) =>
+          (p.status === "dark" || p.status === "degraded") &&
+          (p.kind !== "glos" || p.usedFor.includes("windKt")),
+      ) && !driftProblems.some((d) => d.status === "under"),
   };
 }

@@ -25,6 +25,7 @@
 // Server-only.
 
 import { M_TO_FT, msToKt } from "./units";
+import type { BuoyRow } from "./ndbc";
 
 const OBS_URL = "https://seagull-api.glos.org/api/v1/obs";
 
@@ -98,6 +99,86 @@ function newest(params: Map<number, ObsPoint[]>, id: number | undefined, now: nu
   }
   if (!best) return null;
   return now - new Date(best.timestamp).getTime() > MAX_OBS_AGE_MS ? null : best;
+}
+
+/**
+ * Recent observations for a GLOS platform, shaped as BuoyRow so the station-health
+ * analyzer can grade a Spotter with exactly the same code it uses for an NDBC buoy.
+ *
+ * These platforms are load-bearing and were invisible to the health check until now:
+ * six harbors take their waves from Spotters, and Escanaba and Gladstone take their LIVE
+ * WIND from the Bay de Noc Spotter. If one goes dark nothing else notices — those two
+ * silently fall back to a gridpoint model measured at 0.72x a same-site anemometer, which
+ * is the optimistic direction.
+ *
+ * No staleness guard here, deliberately: the whole point is to SEE stale and partially
+ * dead feeds, the same reason getBuoyRows skips it.
+ */
+export async function getGlosRows(ref: GlosWaveRef, days = 10): Promise<BuoyRow[]> {
+  const start = new Date(Date.now() - days * 24 * 3600_000).toISOString().slice(0, 10);
+  let data: ObsDataset[];
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20_000);
+    const res = await fetch(`${OBS_URL}?obsDatasetId=${ref.datasetId}&startDate=${start}`, {
+      signal: ctrl.signal,
+      next: { revalidate: 900 },
+    });
+    clearTimeout(timer);
+    if (!res.ok) return [];
+    data = (await res.json()) as ObsDataset[];
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(data)) return [];
+
+  // parameter_id -> which BuoyRow field it fills, with the unit conversion.
+  const map = new Map<number, [string, (v: number) => number]>();
+  const put = (id: number | undefined, field: string, conv: (v: number) => number) => {
+    if (id != null) map.set(id, [field, conv]);
+  };
+  put(ref.waveId, "waveFt", (v) => v * M_TO_FT);
+  put(ref.periodId, "wavePeriodS", (v) => v);
+  put(ref.dirId, "waveDir", (v) => v);
+  put(ref.tempId, "waterTempF", kelvinToF);
+  // Spotters report wind SPEED only — never a direction, so windDir stays null and the
+  // health check must not expect one from them.
+  put(ref.windId, "windKt", msToKt);
+
+  // Bucket into whole hours rather than keying on the exact timestamp. A Spotter's series
+  // do NOT share a clock: Grand Haven reports waves on :00/:10/:20 and water temperature
+  // on :26/:31/:36 — 206 wave and 824 temp observations over two days with ZERO timestamps
+  // in common. Keying exactly produced a row per reading with a single field set, so every
+  // column's fill rate read as its share of the rows (waves 20%, temp 80%) and the health
+  // check called two perfectly healthy sensors degraded. Muskegon escaped only because its
+  // series happen to share a clock (134 of 137).
+  //
+  // An hour is comfortably coarser than every cadence in use here (5–30 min), so a healthy
+  // series fills every bucket, while one that has genuinely stopped still shows as missing.
+  const BUCKET_MS = 3600_000;
+  const byHour = new Map<number, BuoyRow>();
+  for (const ds of data) {
+    for (const p of ds.parameters ?? []) {
+      const m = map.get(p.parameter_id);
+      if (!m) continue;
+      const [field, conv] = m;
+      for (const o of p.observations ?? []) {
+        if (o.value == null) continue;
+        const t = new Date(o.timestamp).getTime();
+        if (!Number.isFinite(t)) continue;
+        const bucket = Math.floor(t / BUCKET_MS) * BUCKET_MS;
+        const row =
+          byHour.get(bucket) ??
+          ({ time: bucket, windDir: null, windKt: null, gustKt: null, waveFt: null,
+             wavePeriodS: null, waveDir: null, waterTempF: null, airTempF: null } as BuoyRow);
+        // First reading in the hour wins; we only need presence and a representative value.
+        const slot = row as unknown as Record<string, number | null>;
+        if (slot[field] == null) slot[field] = conv(o.value);
+        byHour.set(bucket, row);
+      }
+    }
+  }
+  return Array.from(byHour.values()).sort((a, b) => b.time - a.time);
 }
 
 /** Current wave + water temperature for a GLOS platform. Null if unreachable or stale. */

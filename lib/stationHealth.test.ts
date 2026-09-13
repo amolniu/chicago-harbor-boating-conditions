@@ -214,6 +214,65 @@ describe("assessDrift", () => {
   });
 });
 
+describe("GLOS sources are monitored too", () => {
+  const GLOS = { kind: "glos" as const, label: "Bay de Noc Spotter" };
+
+  it("appears in the usage map with only the series its ref declares", () => {
+    // The Bay de Noc Spotter (ds 695) is the LIVE WIND source for two harbors, and every
+    // GLOS platform was invisible to this check until 2026-09-13.
+    const u = stationUsage().find((x) => x.station === "glos:695")!;
+    expect(u.kind).toBe("glos");
+    expect(u.columns).toContain("windKt");
+    expect(u.columns).toContain("waveFt");
+    expect(u.columns, "Spotters report speed only, never a bearing").not.toContain("windDir");
+    expect(u.harbors).toEqual(["escanaba", "gladstone"]);
+  });
+
+  it("a wave-only Spotter is not graded on wind", () => {
+    const u = stationUsage().find((x) => x.station === "glos:671")!; // Grand Haven
+    expect(u.columns).toContain("waveFt");
+    expect(u.columns).not.toContain("windKt");
+  });
+
+  it("every GLOS platform in config is monitored, and no NDBC id collides with one", () => {
+    const usage = stationUsage();
+    const glos = usage.filter((u) => u.kind === "glos");
+    expect(glos.length, "five Spotters are wired in harbors.ts").toBe(5);
+    for (const u of glos) expect(u.glos, "the caller needs the ref to fetch it").toBeTruthy();
+    expect(new Set(usage.map((u) => u.station)).size).toBe(usage.length);
+  });
+
+  it("a dark Spotter says it may simply be the off-season", () => {
+    // Spotters are pulled for the winter. If every dark one screamed, this report would be
+    // red from October to April and nobody would read it in July when it matters.
+    const r = assessStation("glos:671", rows(200, 400), ["waveFt"], ["grand-haven"], NOW, GLOS);
+    expect(r.status).toBe("dark");
+    expect(r.findings.join(" ")).toMatch(/seasonal/i);
+    expect(r.findings.join(" "), "names the fallback").toMatch(/gridpoint/i);
+    expect(r.label).toBe("Bay de Noc Spotter");
+  });
+
+  it("losing a wave Spotter does not fail the run; losing a WIND Spotter does", () => {
+    // The distinction that matters. A lost wave/temp Spotter degrades to the gridpoint —
+    // documented and acceptable. A lost wind Spotter drops Escanaba and Gladstone onto a
+    // model that reads 0.72x a same-site anemometer: optimistic, the dangerous direction.
+    const waveOnly = assessStation("glos:671", rows(200, 400), ["waveFt"], ["grand-haven"], NOW, GLOS);
+    expect(summarize([waveOnly], []).ok, "seasonal wave outage is not a failure").toBe(true);
+
+    const windSource = assessStation("glos:695", rows(200, 400), ["waveFt", "windKt"], ["escanaba", "gladstone"], NOW, GLOS);
+    expect(summarize([windSource], []).ok, "a dark WIND source must fail").toBe(false);
+    expect(windSource.findings.join(" ")).toMatch(/0\.72/);
+    expect(windSource.findings.join(" ")).toMatch(/optimistic/);
+  });
+
+  it("still reports both kinds as problems even when only one fails the run", () => {
+    const waveOnly = assessStation("glos:671", rows(200, 400), ["waveFt"], ["grand-haven"], NOW, GLOS);
+    const s = summarize([waveOnly], []);
+    expect(s.problems, "reported, just not fatal").toHaveLength(1);
+    expect(s.ok).toBe(true);
+  });
+});
+
 describe("stationUsage", () => {
   it("knows 45198 drives wind direction for the whole Chicago fleet", () => {
     // This is the fact that made its dead sensor critical rather than cosmetic.
