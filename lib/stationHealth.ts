@@ -249,9 +249,34 @@ export interface DriftReport {
   meanKt: number;
   referenceMeanKt: number;
   ratio: number;
-  status: "ok" | "under" | "over" | "insufficient";
+  /** `under` fails a run; `suspect` and `over` are reported but never fail — see the
+   *  Spotter note on assessDrift for why that distinction is load-bearing. */
+  status: "ok" | "under" | "suspect" | "over" | "insufficient";
   finding: string | null;
 }
+
+/**
+ * Is this reference a GLOS Sofar Spotter (ids look like `SPOT-30364R`)?
+ *
+ * Spotters carry no anemometer — their wind is inferred from the wave spectrum and reads
+ * 1.1–1.9× a real one (triangulated 2026-09-02 over 14 days: ~1.9× below 8 kt, ~1.1× above
+ * 15 kt). A perfectly healthy anemometer therefore lands at 0.5–0.9 against a Spotter, so
+ * treating that as a failure marks three good stations bad every single run — and a check
+ * that cries wolf is one nobody reads, which is exactly how the next genuine 0.51× station
+ * slips through.
+ */
+export function isSpotterReference(reference: string): boolean {
+  return /^SPOT-/i.test(reference.trim());
+}
+
+/** Console marker per drift status, so the symbols are defined once. */
+export const DRIFT_MARK: Record<DriftReport["status"], string> = {
+  under: "!!",
+  suspect: " ?",
+  over: " ~",
+  insufficient: "  ",
+  ok: "  ",
+};
 
 /** Reading LOW is the failure worth breaking on: a sheltered or drifting station
  *  makes conditions look safer than they are. Reading high is merely conservative
@@ -273,15 +298,27 @@ export function assessDrift(
   const referenceMeanKt = refValues.length ? mean(refValues) : 0;
   const ratio = referenceMeanKt > 0 ? meanKt / referenceMeanKt : 0;
 
+  const against =
+    `reads ${meanKt.toFixed(1)} kt against ${referenceMeanKt.toFixed(1)} kt at ${reference} ` +
+    `(${referenceKm.toFixed(0)} km) — ratio ${ratio.toFixed(2)}`;
+
   let status: DriftReport["status"] = "ok";
   let finding: string | null = null;
   if (!enough) {
     status = "insufficient";
   } else if (ratio < RATIO_LOW) {
-    status = "under";
-    finding =
-      `reads ${meanKt.toFixed(1)} kt against ${referenceMeanKt.toFixed(1)} kt at ${reference} ` +
-      `(${referenceKm.toFixed(0)} km) — ratio ${ratio.toFixed(2)}. Under-reading makes conditions look safer than they are.`;
+    // Reading low is the failure worth breaking a run over — it makes conditions look
+    // safer than they are — UNLESS the reference is a Spotter, whose own upward bias
+    // produces exactly this ratio from a healthy station.
+    if (isSpotterReference(reference)) {
+      status = "suspect";
+      finding =
+        `${against}, but ${reference} is a Sofar Spotter, which reads 1.1–1.9× a real ` +
+        `anemometer. Confirm against a second anemometer before re-pointing anything.`;
+    } else {
+      status = "under";
+      finding = `${against}. Under-reading makes conditions look safer than they are.`;
+    }
   } else if (ratio > RATIO_HIGH) {
     status = "over";
     finding = `reads ${ratio.toFixed(2)}× ${reference} — conservative, but worth a look if it drifts further.`;

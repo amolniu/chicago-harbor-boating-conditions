@@ -6,6 +6,8 @@ import {
   summarize,
   DARK_AGE_H,
   SENSORLESS,
+  isSpotterReference,
+  DRIFT_MARK,
   type HealthColumn,
 } from "./stationHealth";
 import type { BuoyRow } from "./ndbc";
@@ -145,15 +147,66 @@ describe("assessStation", () => {
 describe("assessDrift", () => {
   const many = (v: number) => Array(24).fill(v);
 
-  it("fails a station reading LOW — conditions look safer than they are", () => {
-    const d = assessDrift("KWNW3", many(5), "SPOT-1", 13, many(10));
+  it("fails a station reading LOW against a real anemometer", () => {
+    const d = assessDrift("KWNW3", many(5), "45186", 13, many(10));
     expect(d.status).toBe("under");
     expect(d.ratio).toBeCloseTo(0.5, 2);
     expect(d.finding).toMatch(/safer than they are/);
   });
 
+  it("the real KWNW3 was measured against a SPOTTER, so it only reads as suspect", () => {
+    // Worth pinning honestly rather than pretending otherwise. KWNW3 (0.9 km off the
+    // marina, reading half the true wind) was caught at 0.51x a Spotter — and a Spotter's
+    // own 1.1-1.9x bias produces that ratio from a HEALTHY station too, so the comparison
+    // alone could not prove it. It was confirmed only when the model wind at the same spot
+    // read 1.10x that same Spotter. The validator therefore surfaces this loudly without
+    // failing, and the finding must tell the reader what would settle it.
+    const d = assessDrift("KWNW3", many(5), "SPOT-30949C", 13, many(10));
+    expect(d.status).toBe("suspect");
+    expect(d.finding).toMatch(/second anemometer/);
+  });
+
   it("only notes a station reading high — conservative is not a fault", () => {
-    expect(assessDrift("MNMM4", many(20), "SPOT-1", 23, many(10)).status).toBe("over");
+    expect(assessDrift("MNMM4", many(20), "45186", 23, many(10)).status).toBe("over");
+  });
+
+  it("does NOT fail a low ratio measured against a Spotter", () => {
+    // Spotters read 1.1-1.9x a real anemometer, so a healthy station lands at 0.5-0.9
+    // against one. Three good stations (grand-haven, whitehall, fayette) were being
+    // marked bad every run by this exact comparison. A check that cries wolf is one
+    // nobody reads, which is how the next genuine 0.51x station slips through.
+    const d = assessDrift("FPTM4", many(7), "SPOT-30364R", 26, many(17));
+    expect(d.status).toBe("suspect");
+    expect(d.finding).toMatch(/Sofar Spotter/);
+    expect(d.finding, "tells the reader what would settle it").toMatch(/second anemometer/);
+  });
+
+  it("still fails the SAME ratio when the reference is a real anemometer", () => {
+    // The pair that matters: identical numbers, opposite verdicts, decided only by what
+    // the reference is. This is the line between a false alarm and a real KWNW3.
+    const spotter = assessDrift("X", many(7), "SPOT-30364R", 26, many(17));
+    const anemometer = assessDrift("X", many(7), "45186", 26, many(17));
+    expect(spotter.ratio).toBeCloseTo(anemometer.ratio, 6);
+    expect(spotter.status).toBe("suspect");
+    expect(anemometer.status).toBe("under");
+  });
+
+  it("recognises Spotter ids, and nothing else", () => {
+    expect(isSpotterReference("SPOT-30364R")).toBe(true);
+    expect(isSpotterReference("spot-1234")).toBe(true);
+    expect(isSpotterReference(" SPOT-42 ")).toBe(true);
+    expect(isSpotterReference("45186")).toBe(false);
+    expect(isSpotterReference("CNII2")).toBe(false);
+    expect(isSpotterReference("Sturgeon Bay Spotter"), "name, not an id").toBe(false);
+  });
+
+  it("marks only `under` as a failure symbol", () => {
+    // The validator fails the run on "!!" alone; if another status ever gained that
+    // marker the run would start breaking on non-faults.
+    expect(DRIFT_MARK.under).toBe("!!");
+    expect(DRIFT_MARK.suspect).not.toBe("!!");
+    expect(DRIFT_MARK.over).not.toBe("!!");
+    expect(DRIFT_MARK.ok).not.toBe("!!");
   });
 
   it("stays quiet on thin samples", () => {

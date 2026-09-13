@@ -5,7 +5,7 @@
 // sits 0.9 km from the marina and reported HALF the true wind for a day before this was
 // caught by hand; this script does that check for every harbor, automatically.
 //
-// For each harbor it compares the 24 h mean wind of the configured source (its NDBC
+// For each harbor it compares the multi-day mean wind of the configured source (its NDBC
 // station, or the NWS gridpoint model where windFromGrid applies) against the nearest
 // live GLOS *moored buoy* — deliberately never a "tower", since GLOS's shore towers sit
 // a few km from the Chicago harbors and read ~12 kt low.
@@ -23,22 +23,35 @@
 
 import { describe, it } from "vitest";
 import { HARBORS, type Harbor } from "@/lib/harbors";
+import { assessDrift, DRIFT_MARK, RATIO_LOW } from "@/lib/stationHealth";
 
 const UA = process.env.NWS_USER_AGENT || "ChicagoHarborSailing/0.1 (station validator)";
 const MS_TO_KT = 1.94384;
 const KMH_TO_KT = 0.539957;
-const DAY_MS = 24 * 3600_000;
 
-// Asymmetric on purpose. A source that reads LOW makes conditions look safer than they
-// are — that's the failure mode worth breaking the build over. Reading HIGH is merely
-// conservative, and is expected whenever the reference buoy sits further offshore with
-// more fetch, so it's reported but not treated as a fault.
-const RATIO_LOW = 0.7;
-const RATIO_HIGH = 1.6;
-/** Below this many samples on either side, report but never fail. */
-const MIN_SAMPLES = 12;
+/**
+ * Comparison window. Ten days, NOT 24 hours.
+ *
+ * A single day is far too short: on a day with a lake breeze or a frontal passage the
+ * spatial wind gradient alone swings the ratio across the fail threshold for perfectly
+ * healthy stations. Measured 2026-09-13, same pairs at widening windows:
+ *
+ *   45187 vs 45186   1 d 0.80  |  3 d 0.99  |  7 d 0.94  |  14 d 0.96
+ *   45187 vs 45199     —       |  3 d 0.70  |  7 d 0.78  |  14 d 0.81
+ *
+ * The one-day column is the outlier in both; everything settles by ~7 days. On the 24 h
+ * window this script FAILED Southport at 0.57 while passing North Point at 0.79 — the
+ * same station, 45187, judged differently only by which reference happened to be nearest.
+ * Costs nothing extra: realtime2 already carries ~45 days in the file we fetch anyway.
+ */
+const WINDOW_DAYS = 10;
+const WINDOW_MS = WINDOW_DAYS * 24 * 3600_000;
 
-const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
+// The drift RULE — thresholds, the LOW/HIGH asymmetry, and the Spotter caveat — lives in
+// lib/stationHealth.ts assessDrift(), where it is unit-tested. This script supplies the
+// live data and prints the table. It deliberately does NOT re-derive the decision: this
+// file used to carry its own copies of RATIO_LOW/RATIO_HIGH/MIN_SAMPLES with the same
+// values, which meant whichever copy someone tuned, the other silently disagreed.
 const km = (aLat: number, aLon: number, bLat: number, bLon: number) => {
   const R = 6371, p = Math.PI / 180;
   return 2 * R * Math.asin(Math.sqrt(
@@ -57,7 +70,7 @@ async function getJson<T>(url: string, geo = false): Promise<T | null> {
   }
 }
 
-/** 24 h of wind speed (kt) from an NDBC station. */
+/** Recent wind speed (kt) from an NDBC station, over WINDOW_DAYS. */
 async function ndbcWind(station: string): Promise<number[]> {
   let text: string;
   try {
@@ -69,7 +82,7 @@ async function ndbcWind(station: string): Promise<number[]> {
   } catch {
     return [];
   }
-  const cutoff = Date.now() - DAY_MS;
+  const cutoff = Date.now() - WINDOW_MS;
   const out: number[] = [];
   for (const line of text.split("\n")) {
     if (!line.trim() || line.startsWith("#")) continue;
@@ -81,7 +94,9 @@ async function ndbcWind(station: string): Promise<number[]> {
   return out;
 }
 
-/** 24 h of gridpoint model wind (kt) for a harbor's cell. */
+/** Gridpoint model wind (kt) for a harbor's cell. NOTE: the gridpoint endpoint keeps
+ *  little past data, so MODEL harbors get far fewer samples than buoy ones however wide
+ *  the window — expect [few samples] on those rows. */
 async function modelWind(grid: string): Promise<number[]> {
   const gp = await getJson<{ properties: Record<string, { values?: { validTime: string; value: number | null }[] }> }>(
     `https://api.weather.gov/gridpoints/${grid}`, true);
@@ -90,7 +105,7 @@ async function modelWind(grid: string): Promise<number[]> {
   return vals
     .filter((v) => {
       const t = new Date(v.validTime.split("/")[0]).getTime();
-      return t <= now && t >= now - DAY_MS && v.value != null;
+      return t <= now && t >= now - WINDOW_MS && v.value != null;
     })
     .map((v) => (v.value as number) * KMH_TO_KT);
 }
@@ -114,14 +129,14 @@ async function glosBuoys(): Promise<GlosPlatform[]> {
 
 const windParamCache = new Map<number, number[]>();
 
-/** 24 h of wind speed (kt) from a GLOS platform. Identifies the wind series by matching
+/** Wind speed (kt) from a GLOS platform over WINDOW_DAYS. Identifies the wind series by matching
  *  the id against /parameters, cached per platform. */
 async function glosWind(id: number, paramIndex: Map<number, string>): Promise<number[]> {
   if (windParamCache.has(id)) return windParamCache.get(id)!;
-  const start = new Date(Date.now() - DAY_MS).toISOString().slice(0, 10);
+  const start = new Date(Date.now() - WINDOW_MS).toISOString().slice(0, 10);
   const data = await getJson<{ parameters?: { parameter_id: number; observations?: { timestamp: string; value: number | null }[] }[] }[]>(
     `https://seagull-api.glos.org/api/v1/obs?obsDatasetId=${id}&startDate=${start}`);
-  const cutoff = Date.now() - DAY_MS;
+  const cutoff = Date.now() - WINDOW_MS;
   const out: number[] = [];
   for (const ds of data ?? []) {
     for (const p of ds.parameters ?? []) {
@@ -145,6 +160,7 @@ describe("station validation (live)", () => {
 
     const rows: string[] = [];
     const problems: string[] = [];
+    const suspects: string[] = [];
 
     for (const h of HARBORS as Harbor[]) {
       const label = h.buoyStation ?? "MODEL";
@@ -173,27 +189,40 @@ describe("station validation (live)", () => {
         rows.push(`  ${h.id.padEnd(20)} ${label.padEnd(12)} — no comparison available`);
         continue;
       }
-      const a = mean(ours), b = mean(ref.v), ratio = a / b;
-      const enough = ours.length >= MIN_SAMPLES && ref.v.length >= MIN_SAMPLES;
-      // A Sofar Spotter reference carries no anemometer and reads 1.1-1.9x a real one,
-      // so a healthy anemometer lands near 0.5-0.9 against it. Flag those for a human
-      // to confirm against a second anemometer, but do not FAIL on them — a check that
-      // cries wolf every run is one nobody reads, which is how the real 0.51x station
-      // would slip through next time.
-      const spotterRef = /^SPOT-/i.test(ref.p.pid || "");
-      const under = enough && ratio < RATIO_LOW && !spotterRef; // unsafe — fails
-      const suspectVsSpotter = enough && ratio < RATIO_LOW && spotterRef;
-      const over = enough && ratio > RATIO_HIGH; // conservative — noted only
-      const mark = under ? "!!" : suspectVsSpotter ? " ?" : over ? " ~" : "  ";
+      // The DECISION lives in lib/stationHealth.ts assessDrift() — thresholds, the
+      // asymmetry, and the Spotter caveat — so it is unit-tested. This script supplies
+      // live data and prints the table; it must not re-derive the rule, because a second
+      // copy is one that silently disagrees the moment somebody tunes the other.
+      const d = assessDrift(h.id, ours, ref.p.pid || ref.p.name, ref.d, ref.v);
+      const note =
+        d.status === "insufficient" ? "  [few samples]"
+        : d.status === "over" ? "  (reads high — conservative)"
+        : d.status === "suspect" ? "  (vs a SPOTTER, which reads 1.1-1.9x high — confirm against an anemometer before acting)"
+        : "";
       rows.push(
-        `  ${mark + h.id.padEnd(18)} ${label.padEnd(12)} ${a.toFixed(1).padStart(5)} kt   vs ${b.toFixed(1).padStart(5)} kt  ` +
-        `${ref.p.pid || ref.p.name} (${ref.d.toFixed(0)} km)  ratio ${ratio.toFixed(2)}` +
-        `${enough ? "" : "  [few samples]"}${over ? "  (reads high — conservative)" : ""}` +
-        `${suspectVsSpotter ? "  (vs a SPOTTER, which reads 1.1-1.9x high — confirm against an anemometer before acting)" : ""}`);
-      if (under) problems.push(`${h.id}: ${label} reads ${a.toFixed(1)} kt vs ${b.toFixed(1)} kt at ${ref.p.pid} (${ref.d.toFixed(0)} km) — ratio ${ratio.toFixed(2)}`);
+        `  ${DRIFT_MARK[d.status] + h.id.padEnd(18)} ${label.padEnd(12)} ${d.meanKt.toFixed(1).padStart(5)} kt   vs ` +
+        `${d.referenceMeanKt.toFixed(1).padStart(5)} kt  ${d.reference} (${d.referenceKm.toFixed(0)} km)  ` +
+        `ratio ${d.ratio.toFixed(2)}${note}`);
+      if (d.status === "under") problems.push(`${h.id}: ${label} ${d.finding}`);
+      if (d.status === "suspect") suspects.push(`${h.id}: ${label} ${d.finding}`);
     }
 
     console.log(`\n24 h mean wind: configured source vs nearest live GLOS moored buoy\n${rows.join("\n")}\n`);
+
+    // A suspect must not pass in silence. KWNW3 — the 0.51x mis-siting this script exists
+    // to catch — was itself measured against a Spotter, and was confirmed only once the
+    // MODEL wind at the same spot read 1.10x that same Spotter. So these print loudly on
+    // an otherwise-passing run rather than failing forever: a permanent failure with no
+    // action that clears it is one people learn to scroll past.
+    if (suspects.length) {
+      console.log(
+        `?? ${suspects.length} station(s) read low against a SPOTTER reference — not a failure, ` +
+        `but not a clean bill of health either:\n  ${suspects.join("\n  ")}\n\n` +
+        `   A Spotter reads 1.1-1.9x a real anemometer, so a healthy station lands at 0.5-0.9 ` +
+        `against one; that range cannot separate a healthy station from a bad one. Confirm ` +
+        `against a second source before acting — and before dismissing.\n`);
+    }
+
     if (problems.length) {
       throw new Error(
         `${problems.length} station(s) reading below ${RATIO_LOW}× a nearby buoy:\n  ` +
