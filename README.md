@@ -138,7 +138,9 @@ deploys took 7+ minutes), it leaves Firebase's 10 s SSR-discovery timeout at a v
 Next entry intermittently exceeds, and piping its output masks a *failed* deploy as exit 0.
 
 - **Config:** `firebase.json` (hosting `site` + `frameworksBackend`, plus the Firestore rules
-  target), `firestore.rules` (own-document-only), Node 20 runtime (`package.json` engines).
+  target), `firestore.rules` (own-document-only), Node 22 runtime (`package.json` engines — firebase-tools
+  maps it straight to `nodejs22`, and refuses to deploy once a runtime is decommissioned; 22 stops
+  getting patches 2027-04-30).
 - **Auth (one-time console setup):** enable Authentication + the **Google** and **Email/Password**
   providers, and add your hosting domain to **Authorized Domains**. User data lives in a dedicated
   `sailing` Firestore database.
