@@ -49,11 +49,13 @@ engine, and returns one decision with the reason in plain English.
   (default), Beneteau 40.
 - Three skill levels scale every limit: Beginner ×0.75, Intermediate ×1.0, Advanced ×1.2.
 - **Craft-aware.** Paddlers get "Go kayaking / paddleboarding", "Launch & landing", an
-  offshore-wind warning, and never reef or slip advice. The copy is deliberately craft-neutral.
+  offshore-wind warning, and never reef or slip advice. The copy is meant to be craft-neutral,
+  though a few labels still say "sailor".
 - **My boats** (`/boats`, signed in) — add your own boat from its ISO 12217 design category
-  (A–D) plus optional LOA, beam, displacement, ballast, draft and AVS. Limits are derived from
-  the Capsize Screening Formula and an estimated angle of vanishing stability; a 53-boat
-  catalog autofills specs. Custom boats are rated as sailboats.
+  (A–D) plus optional LOA, beam, displacement, ballast, draft and AVS. The category sets the
+  base limits; given the dimensions, the Capsize Screening Formula and an estimated angle of
+  vanishing stability refine them. A 53-boat catalog autofills specs. Custom boats are rated as
+  sailboats.
 
 ### Accounts and alerts
 
@@ -61,7 +63,7 @@ engine, and returns one decision with the reason in plain English.
   boat, skill, favorites, filter and theme live in `localStorage`.
 - Signed in, favorites sync across devices, custom boats are saved, and you can set up an alert
   (`/alerts`): watched harbors, the alert's own boat and skill, and rules — turns green, wind
-  from chosen directions, max wind / gust / waves (all must hold) — plus a channel (email or
+  from chosen directions, max wind / gust / waves (all must hold) — plus channels (email and/or
   browser push).
 - **Alert delivery is not built yet.** Settings are saved, but nothing evaluates or sends them.
   That is the next phase.
@@ -101,11 +103,15 @@ yellow 30–59, red < 30**, and the lowest-scoring metric is named as the limite
 | Trigger | Score capped at |
 |---|---|
 | NWS Tornado, Severe Thunderstorm, Special Marine, Hurricane or Tropical Storm Warning; waterspouts | **0** — outranks every model, and leads the reason |
-| Marine Storm Warning | 5 |
+| "Storm Warning" in the zone's nearshore marine text | 5 |
 | HRRR thunderstorm **active** (stormy now or next hour) | 8 |
-| Gale Warning | 10 |
-| Small Craft Advisory | 24 / 48 / 58 by skill, plus up to 20 for a sheltered harbor |
+| "Gale" in the zone's nearshore marine text | 10 |
+| "Small Craft Advisory" in the zone's nearshore marine text | 24 / 48 / 58 by skill, plus up to 20 for a sheltered harbor |
 | NWS Tornado or Severe Thunderstorm **Watch**; HRRR storm **elevated** (next 6 h) | 45 |
+
+⚠️ The marine-text caps match those phrases *anywhere* in the zone forecast — including
+"a Small Craft Advisory may be needed" for a later period — so a harbor can be capped for an
+advisory that is not yet in effect. A known bug; see [Known issues](#known-issues).
 
 **Unknown wind direction → assume the worst.** If no station or model can supply a bearing,
 exit waves use the harbor's worst exposure over every bearing and the crosswind is taken as the
@@ -148,12 +154,13 @@ only the radar and webcam images directly.
 - **Wind** — speed, direction and gust each resolve independently, because a station can lose
   one sensor and keep the rest: the harbor's own station first, then (unless the harbor opts into
   `windFromGrid`) the Chicago lakefront stations. Failing those, a validated Spotter's speed
-  (direction and gust from the model), then the gridpoint model. A borrowed gust below the
+  (direction and gust from the model), then — for `windFromGrid` harbors only — the gridpoint
+  model. Elsewhere the model fills in just a missing direction. A borrowed gust below the
   sustained wind is dropped.
 - **Waves** — an observed wave (NDBC buoy or Spotter) is blended with the model, weighted by
   distance: 0.85 observation at the harbor, falling to 0.45 at 30 km or more.
 - **Freshness** — a source that has gone quiet reads as *absent*, never as current, so ratings
-  fall back to the model instead of showing stale observations.
+  fall back to a neighbouring station or the model instead of showing stale observations.
 
 ## Local development
 
@@ -173,12 +180,13 @@ Firebase web config in `lib/firebase.ts`; swap it to point at your own project.
 | Variable | Used for |
 |---|---|
 | `DATABASE_URL` | Postgres (Neon) for history. Without it, history is off. |
-| `CRON_SECRET` | Guards `/api/cron/*` (`?secret=` or `Authorization: Bearer`). When unset the routes are open, as in local dev. |
+| `CRON_SECRET` | Guards `/api/cron/*` (`?secret=` or `Authorization: Bearer`). When unset the routes are open. |
 | `NWS_USER_AGENT` | Contact User-Agent that NWS asks for on its APIs. A generic fallback is used if unset. |
 
-Use `.env`, not `.env.local`: `.env` is read by `next dev`, the live scripts and drizzle-kit (via
-`scripts/load-env.ts`), and the deployed function. `.env.local` is read by `next dev` alone, so a
-`DATABASE_URL` there appears to work locally and then silently does nothing everywhere else.
+Use `.env`, not `.env.local`: `.env` is read by Next, the live scripts and drizzle-kit (via
+`scripts/load-env.ts`), and the deployed function. `.env.local` is read by Next alone, so a
+`DATABASE_URL` there appears to work in the app and then silently does nothing for the live
+scripts, drizzle-kit and production.
 
 **Scripts:**
 
@@ -192,7 +200,8 @@ Use `.env`, not `.env.local`: `.env` is read by `next dev`, the live scripts and
 | `npm run db:push` | Apply the Drizzle schema to the database |
 | `npm run deploy` | Deploy to Firebase Hosting (see below — always use this) |
 
-Take a snapshot by hand: `curl http://localhost:3000/api/cron/poll`.
+Take a snapshot by hand: `curl http://localhost:3000/api/cron/poll`, adding
+`-H "Authorization: Bearer <secret>"` if `.env` sets `CRON_SECRET`.
 
 ## Architecture
 
@@ -214,7 +223,8 @@ lib/              domain logic — isomorphic unless marked server-only
   astro.ts        sunrise / sunset
   types.ts        shared types
   conditions.ts   assembles per-harbor conditions + persists snapshots    (server-only)
-  ndbc.ts  nws.ts  alerts.ts  storm.ts  glos.ts   source fetchers         (server-only)
+  ndbc.ts  nws.ts  storm.ts  glos.ts   source fetchers                    (server-only)
+  alerts.ts       NWS warnings: the fetch is server-only; the pure classifier runs in the browser
   health.ts       fetches the rows stationHealth.ts grades                (server-only)
   firebase.ts     Firebase client (Auth + Firestore, loaded lazily)
   userPrefs.ts    favorites, custom boats and alert settings on users/{uid}
@@ -305,8 +315,9 @@ Two checks with different jobs:
   public (only the cron route is guarded) and runs a live check on every load.
 - **`npm run validate:stations`** — *does each station still agree with its neighbours?* It
   tests the source each harbor actually rates from against the nearest independent reference
-  over 10 days, and fails on anything reading below 0.7× — the direction that makes conditions
-  look safer than they are. Nothing schedules it: run it before shipping any new station.
+  over 10 days, and fails on anything reading below 0.7× a real anemometer — the direction that
+  makes conditions look safer than they are. Against a Spotter reference, which reads high, it
+  only warns. Nothing schedules it: run it before shipping any new station.
   [`docs/ADDING_HARBORS.md`](docs/ADDING_HARBORS.md) explains how to read its output.
 
 ### History database
@@ -326,18 +337,23 @@ of them are reporting right now.
 
 ## Known issues
 
+- **Marine advisories are matched too loosely.** The nearshore-text parser caps a harbor
+  whenever "Small Craft Advisory", "Gale" or "Storm Warning" appears anywhere in its zone
+  forecast, including outlook wording such as "may be needed" for a later period. On 2026-10-02
+  this capped Menominee and Sister Bay for an advisory that was not in effect. It should match
+  only the "… IN EFFECT" headline (`lib/nws.ts`).
 - **Exposure values are seed data** — geometry and general knowledge, to be refined with local
   sailors' input.
-- **Times are shown in Central time** on the detail page, including for the Michigan harbors that
-  keep Eastern time.
+- **Times are shown in Central time** on the detail page, even for the Michigan harbors that keep
+  Eastern time. Only the storm banner uses the harbor's own zone, so the two can disagree.
 - The Area Forecast Discussion link is labelled "LOT" for every harbor, though it loads the
   harbor's own office. A caption still calls forecast waves "wind-sea estimates", though they come
   from the NWS gridpoint.
 - With no wind direction the **rating** assumes the worst, but **Harbor intelligence** shows the
   entrance as "Clear".
 - Harbors without their own NDBC station show no 24-hour wind chart.
-- A harbor whose own station goes dark borrows wind from the Chicago lakefront stations, which
-  can be 70+ km away for the Wisconsin and Michigan harbors.
+- A harbor without `windFromGrid` whose own station goes dark borrows wind from the Chicago
+  lakefront stations — up to ~200 km away for Southport and the Michigan east-shore harbors.
 - Some copy still says "sailor" / "sail window" where it should be craft-neutral.
 
 ## Roadmap
