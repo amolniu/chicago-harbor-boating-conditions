@@ -730,11 +730,11 @@ export const HARBORS: Harbor[] = [
     windFromGrid: true,
     // First observed waves + water temp anywhere in Green Bay: the Little Bay de Noc
     // Spotter is 8.8 km out, almost exactly on this harbor's fetch axis (bearing 161).
-        // windId: spectral wind speed, validated 2026-09-02 vs the FPTM4 anemometer (1.24x,
+    // windId: spectral wind speed, validated 2026-09-02 vs the FPTM4 anemometer (1.24x,
     // conservative) where the model read ~0.6x here. Speed only - direction and gusts
     // stay with the model. KEEP the two ds-695 refs (escanaba/gladstone) IDENTICAL:
     // GLOS fetches dedupe by datasetId, so one ref serves both harbors.
-waveBuoy: { km: 9, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId: 10324, tempId: 10325, windId: 10329, label: "Bay de Noc Spotter" } },
+    waveBuoy: { km: 9, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId: 10324, tempId: 10325, windId: 10329, label: "Bay de Noc Spotter" } },
     marineZone: "LMZ221",
     discussionOffice: "MQT",
     radarStation: "KMQT",
@@ -783,11 +783,11 @@ waveBuoy: { km: 9, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId
     exposedDirs: ["S", "SSW", "SSE"],
     windFromGrid: true,
     // Shares Escanaba's Little Bay de Noc Spotter, 19 km down the bay on bearing 178.
-        // windId: spectral wind speed, validated 2026-09-02 vs the FPTM4 anemometer (1.24x,
+    // windId: spectral wind speed, validated 2026-09-02 vs the FPTM4 anemometer (1.24x,
     // conservative) where the model read ~0.6x here. Speed only - direction and gusts
     // stay with the model. KEEP the two ds-695 refs (escanaba/gladstone) IDENTICAL:
     // GLOS fetches dedupe by datasetId, so one ref serves both harbors.
-waveBuoy: { km: 19, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId: 10324, tempId: 10325, windId: 10329, label: "Bay de Noc Spotter" } },
+    waveBuoy: { km: 19, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId: 10324, tempId: 10325, windId: 10329, label: "Bay de Noc Spotter" } },
     marineZone: "LMZ221",
     discussionOffice: "MQT",
     radarStation: "KMQT",
