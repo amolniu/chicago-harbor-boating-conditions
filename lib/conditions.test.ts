@@ -86,8 +86,54 @@ describe("spotter spectral wind (glos windId)", () => {
   });
 });
 
+describe("fallback stays on the harbor's own shore, then its model", () => {
+  const st = (station: string, over: Partial<BuoyCurrent>): BuoyCurrent => ({
+    windDir: null, windKt: null, gustKt: null, waveFt: null, wavePeriodS: null, waveDir: null,
+    waterTempF: null, airTempF: null, observedAt: "2026-10-03T12:00:00Z", station, ...over,
+  });
+  // Chicago's lakefront is blowing hard and reporting everything. None of it may reach
+  // a Michigan harbor across the lake, or the north shore 70-80 km away.
+  const chicago: [string, BuoyCurrent][] = ["CNII2", "CHII2", "45198", "CMTI2"].map((s) => [
+    s, st(s, { windKt: 25, windDir: 45, gustKt: 32, waveFt: 6, waterTempF: 58, airTempF: 50 }),
+  ]);
+
+  it("a dark 45161 puts Grand Haven on its own model, not Chicago wind from 170 km away", () => {
+    const gh = getHarbor("grand-haven")!;
+    const c = assemble(gh, new Map([...chicago, ["45161", null]]), GRID, "none", undefined);
+    expect(c.source).toBe("NWS model");
+    expect(c.windKt).toBe(GRID.windKt);
+    expect(c.windDir).toBe(GRID.windDir);
+    expect(c.airTempF, "no Chicago air temperature either").toBeNull();
+  });
+
+  it("Southport with its own buoy dark borrows from 45186, not Chicago", () => {
+    const sp = getHarbor("southport")!;
+    const c = assemble(sp, new Map([...chicago, ["45187", null], ["45186", st("45186", { windKt: 11, windDir: 30, gustKt: 15 })]]),
+      GRID, "none", undefined);
+    expect(c.source).toBe("45186");
+    expect(c.windKt).toBe(11);
+  });
+
+  it("ends at the model rather than going dark, for every harbor", () => {
+    // Before 2026-10-03 only windFromGrid harbors could fall back to their model; the rest
+    // showed no wind at all once their stations and the Chicago list were quiet.
+    const c = assemble(getHarbor("belmont")!, new Map(), GRID, "none", undefined);
+    expect(c.source).toBe("NWS model");
+    expect(c.windKt).toBe(GRID.windKt);
+  });
+
+  it("uses the model's gust only when no station has one and it exceeds the sustained wind", () => {
+    const gh = getHarbor("grand-haven")!;
+    const speedOnly = new Map([["45161", st("45161", { windKt: 8, windDir: 270 })]]);
+    expect(assemble(gh, speedOnly, { ...GRID, gustKt: 13 }, "none", undefined).gustKt).toBe(13);
+    expect(assemble(gh, speedOnly, { ...GRID, gustKt: 7 }, "none", undefined).gustKt, "below sustained").toBeNull();
+    const withGust = new Map([["45161", st("45161", { windKt: 8, windDir: 270, gustKt: 10 })]]);
+    expect(assemble(gh, withGust, { ...GRID, gustKt: 13 }, "none", undefined).gustKt, "station gust wins").toBe(10);
+  });
+});
+
 describe("wind field fallback (a station can lose one sensor and keep another)", () => {
-  const bel = getHarbor("belmont")!; // buoyStation 45198, then WIND_FALLBACK
+  const bel = getHarbor("belmont")!; // buoyStation 45198, then its same-shore neighbours
 
   const buoy = (station: string, over: Partial<BuoyCurrent>): BuoyCurrent => ({
     windDir: null, windKt: null, gustKt: null, waveFt: null, wavePeriodS: null, waveDir: null,
@@ -96,10 +142,10 @@ describe("wind field fallback (a station can lose one sensor and keep another)",
 
   // The real 2026-09-03 state: 45198 reports speed on every row, WDIR/GST on none.
   const speedOnly = buoy("45198", { windKt: 7.8 });
-  const fullNeighbour = buoy("CNII2", { windKt: 8.4, windDir: 45, gustKt: 12 });
+  const fullNeighbour = buoy("CHII2", { windKt: 8.4, windDir: 45, gustKt: 12 });
 
   it("borrows direction and gust down the chain when the speed station has neither", () => {
-    const c = assemble(bel, new Map([["45198", speedOnly], ["CNII2", fullNeighbour]]), GRID, "none", undefined);
+    const c = assemble(bel, new Map([["45198", speedOnly], ["CHII2", fullNeighbour]]), GRID, "none", undefined);
     expect(c.windKt, "speed still comes from the nearest station").toBe(7.8);
     expect(c.windDir, "direction borrowed from the neighbour").toBe(45);
     expect(c.gustKt).toBe(12);
@@ -158,9 +204,19 @@ describe("wind field fallback (a station can lose one sensor and keep another)",
   });
 
   it("drops a borrowed gust that is below the measured sustained wind", () => {
-    const calmNeighbour = buoy("CNII2", { windKt: 3, windDir: 90, gustKt: 4 });
-    const c = assemble(bel, new Map([["45198", buoy("45198", { windKt: 12 })], ["CNII2", calmNeighbour]]), GRID, "none", undefined);
+    const calmNeighbour = buoy("CHII2", { windKt: 3, windDir: 90, gustKt: 4 });
+    const c = assemble(bel, new Map([["45198", buoy("45198", { windKt: 12 })], ["CHII2", calmNeighbour]]), GRID, "none", undefined);
     expect(c.windDir, "direction is still worth borrowing").toBe(90);
     expect(c.gustKt, "4 kt is not a gust on a 12 kt wind").toBeNull();
+  });
+
+  it("a REJECTED borrowed gust does not veto the model's higher gust", () => {
+    // 45198 with no gust sensor, a calm neighbour's 4 kt "gust" thrown out, and the model
+    // saying 20 kt. Returning no gust at all would drop the gust term from the rating —
+    // the optimistic direction.
+    const calmNeighbour = buoy("CHII2", { windKt: 3, windDir: 90, gustKt: 4 });
+    const c = assemble(bel, new Map([["45198", buoy("45198", { windKt: 12 })], ["CHII2", calmNeighbour]]),
+      { ...GRID, gustKt: 20 }, "none", undefined);
+    expect(c.gustKt).toBe(20);
   });
 });

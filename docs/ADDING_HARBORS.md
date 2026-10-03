@@ -13,7 +13,7 @@ Michigan harbors (St. Joseph, New Buffalo) are worked examples in `lib/harbors.t
 |---|---|---|
 | `id`, `name`, `lat`, `lon` | identity + location | the marina's coordinates |
 | `buoyStation?` | NDBC station for **live wind + temp** | nearest station with a `realtime2` feed (step 2). Omit for buoy-less harbors (set `windFromGrid`) |
-| `windFromGrid?` | **fall back** to the gridpoint model when no buoy reading is available | `true` when no usable wind buoy exists nearby (e.g. Green Bay), or when the only nearby station reports intermittently — a fresh `buoyStation` always wins, so setting both is correct. Waves still come from `waveGrid`; water temp is blank only if no `waveBuoy` supplies it |
+| `windFromGrid?` | borrow from **no** neighbour station: when the harbor's own sources are quiet, go straight to its gridpoint model (every harbor ends at its model; this only skips `windNeighbors()`) | `true` when no usable wind buoy exists nearby (e.g. Green Bay), or when the only nearby station reports intermittently — a fresh `buoyStation` always wins, so setting both is correct. Waves still come from `waveGrid`; water temp is blank only if no `waveBuoy` supplies it |
 | `waveBuoy?` | `{ station, km }` — a wave buoy right off the harbor + its distance | optional — a buoy closer than `buoyStation` for waves; its **observed** wave is blended with the gridpoint model, weighted by `km` (closer ⇒ more weight). Often a wave-only buoy like `45186`/`45187` (step 2) |
 | `marineZone` | NWS nearshore zone (advisories, wave text) | from the point lookup (step 1) — e.g. `LMZ043` |
 | `waveGrid` | NWS gridpoint `OFFICE/x,y` for **per-harbor waves + marine wind** | from the point lookup (step 1) — e.g. `IWX/19,82` |
@@ -74,9 +74,10 @@ the rest, and that failure is quieter than an outage because nothing looks wrong
 - **No usable buoy at all?** Some regions (e.g. Green Bay / the Bays de Noc) have only
   GLOS stations that lack a `realtime2` feed (they 404), and the nearest real buoy is
   far away in a different water body. In that case omit `buoyStation` and set
-  **`windFromGrid: true`** — the harbor's own NWS gridpoint model then fills in. It is a
-  **fallback, not an override**: a fresh `buoyStation` reading always wins, so it is safe
-  to set both (Menominee and Fayette do — their stations vanish for weeks at a time).
+  **`windFromGrid: true`** — the harbor borrows from no neighbour and its own NWS gridpoint
+  model fills in. It is a **fallback, not an override**: a fresh `buoyStation` reading
+  always wins, so it is safe to set both (Menominee and Fayette do — their stations vanish
+  for weeks at a time).
   Waves still come from `waveGrid`. Water temp is blank only if nothing else supplies it —
   a GLOS `waveBuoy` with a `tempId` covers it, which is how the Bays de Noc get theirs.
 
@@ -91,6 +92,21 @@ the rest, and that failure is quieter than an outage because nothing looks wrong
   `waveObsWeight`), so even a marginal 15–20 km buoy can contribute at reduced weight.
   The same station can be both `buoyStation` and `waveBuoy` if it reports wind **and**
   waves and is the closest option (e.g. South Haven's `45168`).
+
+**Neighbours, and the shore rule.** When a harbor's own station is dark or missing a
+sensor, it borrows from `windNeighbors()`: stations in `NEIGHBOR_STATIONS` (`lib/harbors.ts`)
+on the **same shore** as the harbor's region and within that shore's `MAX_NEIGHBOR_KM`
+(85 km west, 60 km east — set by how well measured station pairs track), nearest
+first — then its own gridpoint model. Never the far side of the lake: before 2026-10-03 a
+single Chicago list served everyone, and a dark 45161 put Grand Haven on Chicago wind from
+170 km away. So when you add a harbor:
+
+- A **new region** needs an entry in `SHORE_OF_REGION`, or its harbors borrow nothing.
+- A **station** can be added to `NEIGHBOR_STATIONS` (activestations.xml position and shore)
+  so nearby harbors may borrow from it — but only after an hourly-matched comparison against
+  the primaries it would stand in for (the table in the `NEIGHBOR_STATIONS` comment). Being
+  someone's primary is not enough, and neither is proximity: never add one that reads low.
+  That is why CMTI2 (0.65×) and CNII2 (0.73×, 6 km from the Chicago Buoy) are absent.
 
 ⚠️ **Use the station id in UPPERCASE.** `realtime2` filenames are uppercase, but the
 station table lists non-numeric ids in lowercase — copy one straight out and you get a
@@ -183,7 +199,8 @@ npm run validate:stations
 ```
 
 Compares the wind source each harbor **actually rates from** (`windSourceOf()`: its NDBC
-station, else a validated Spotter, else the gridpoint model) against the nearest
+station, else its nearest same-shore neighbour, else a validated Spotter, else the gridpoint
+model) against the nearest
 independent reference over 10 days, and fails if anything reads below 0.7× — the
 direction that makes conditions look safer than they are. The reference is a live GLOS
 **moored buoy**, or — when the source is itself a Spotter — the nearest **NDBC

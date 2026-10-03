@@ -6,7 +6,7 @@
 // Server-only.
 
 import { Conditions, type StormRisk } from "./types";
-import { Harbor, HARBORS, WIND_FALLBACK, PRIMARY_WAVE_STATION } from "./harbors";
+import { Harbor, HARBORS, windNeighbors } from "./harbors";
 import { BuoyCurrent, getBuoyCurrent } from "./ndbc";
 import { getMarineForecast, getGridCurrent, type GridCurrent } from "./nws";
 import { getGlosCurrent, type GlosCurrent } from "./glos";
@@ -92,28 +92,21 @@ export function assemble(
   glos: GlosCurrent | null = null,
   alerts: WeatherAlert[] = [],
 ): Conditions {
-  // The Chicago-neighborhood buoy fallback only fits harbors that lean on those
-  // buoys. A harbor with no nearby buoy takes live wind from its own gridpoint model
-  // (windFromGrid) and does NOT borrow far-off Chicago obs for wind or water temp.
-  const usesGrid = !!harbor.windFromGrid;
-  const fallback = usesGrid ? [] : WIND_FALLBACK;
+  // Same-shore stations within reach, nearest first (lib/harbors.ts windNeighbors) —
+  // never the far side of the lake, and none at all for windFromGrid harbors. Past
+  // them, every harbor ends at its own gridpoint model.
+  const neighbors = windNeighbors(harbor);
   // A dedicated local wave buoy (if set) leads the data chain: it sits right off
   // the harbor, so its observed waves/water-temp beat the model and distant buoys.
   const dataChain = uniq(
-    [
-      harbor.waveBuoy?.station,
-      harbor.buoyStation,
-      ...(usesGrid ? [] : [PRIMARY_WAVE_STATION]),
-      ...fallback,
-    ].filter((s): s is string => !!s),
+    [harbor.waveBuoy?.station, harbor.buoyStation, ...neighbors].filter((s): s is string => !!s),
   );
 
-  // Wind: a real observation always wins. Try the harbor's own buoy (plus the Chicago
-  // neighbours where those apply), and only fall back to the gridpoint model when the
-  // harbor opted in via windFromGrid. That makes windFromGrid a FALLBACK rather than
-  // an override, so a harbor can name an intermittent station (several Green Bay
-  // stations go quiet for days) and still read correctly while it's dark.
-  const windChain = uniq([harbor.buoyStation, ...fallback].filter((s): s is string => !!s));
+  // Wind: a real observation always wins. Try the harbor's own buoy, then its same-shore
+  // neighbours, then a validated Spotter, and only then the gridpoint model. Until
+  // 2026-10-03 the neighbours were one global Chicago list, so a dark 45161 put three
+  // Michigan harbors on Chicago wind from 170–200 km across the lake.
+  const windChain = uniq([harbor.buoyStation, ...neighbors].filter((s): s is string => !!s));
   const wind = pickField(buoys, windChain, "windKt");
   const wb = wind.station ? buoys.get(wind.station) : null;
 
@@ -150,8 +143,15 @@ export function assemble(
     // Model direction is the last resort — better a modeled bearing than none.
     windDir = dirPick.value ?? gridCurrent?.windDir ?? null;
     // A gust below the sustained wind is not a gust. That can happen when the gust
-    // comes from a different station than the speed, so require it to exceed it.
-    gustKt = gustPick.value != null && gustPick.value >= wind.value ? gustPick.value : null;
+    // comes from a different station than the speed, so require it to exceed it. With
+    // no USABLE station gust — none in reach, or one rejected just above — the model's is
+    // used on the same terms as for a Spotter: only when it says something the
+    // observation doesn't. (A rejected gust must not also veto the model's: that left the
+    // rating with no gust term at all, which is the optimistic direction.)
+    const stationGust = gustPick.value != null && gustPick.value >= wind.value ? gustPick.value : null;
+    gustKt =
+      stationGust ??
+      (gridCurrent?.gustKt != null && gridCurrent.gustKt > wind.value ? gridCurrent.gustKt : null);
     windObservedAt = wb?.observedAt ?? null;
     windSource = wind.station ?? harbor.buoyStation ?? "forecast";
   } else if (spotterWindKt != null) {
@@ -162,7 +162,9 @@ export function assemble(
     gustKt = gridCurrent?.gustKt != null && gridCurrent.gustKt > spotterWindKt ? gridCurrent.gustKt : null;
     windObservedAt = glos?.windObservedAt ?? null;
     windSource = harbor.waveBuoy?.glos?.label ?? "GLOS buoy";
-  } else if (usesGrid) {
+  } else if (gridCurrent?.windKt != null) {
+    // Every harbor's last resort, not just windFromGrid ones: its own modeled wind beats
+    // borrowing a reading from the wrong shore — or showing nothing.
     windDir = gridCurrent?.windDir ?? null;
     windKt = gridCurrent?.windKt ?? null;
     gustKt = gridCurrent?.gustKt ?? null;
@@ -217,10 +219,10 @@ export function assemble(
     waveFt,
     wavePeriodS,
     waveDir,
-    // Water temp, nearest source first. The wider dataChain ends in the Chicago
-    // neighbours, so a GLOS platform a few km offshore must be consulted BEFORE it —
-    // otherwise a Michigan harbor would report Lake Michigan's far side, 150 km away.
-    // (45161 does carry a temp probe; the Spotters simply sit far closer to the harbors.)
+    // Water temp, nearest source first. The wider dataChain ends in same-shore
+    // neighbours up to MAX_NEIGHBOR_KM away, so a GLOS platform a few km offshore must
+    // be consulted BEFORE it. (45161 does carry a temp probe; the Spotters simply sit
+    // far closer to the harbors.)
     // waveBuoy (NDBC or GLOS) is by definition the closest local source, so it leads;
     // then the harbor's own station; then the wider chain.
     waterTempF:
@@ -251,12 +253,11 @@ export async function getStormHours(harbor: Harbor): Promise<string[]> {
 
 /** Live conditions for every harbor. Fetches each unique station/zone once. */
 export async function getAllConditions(): Promise<HarborConditions[]> {
-  const stations = uniq([
-    ...HARBORS.map((h) => h.buoyStation).filter((s): s is string => !!s),
-    ...HARBORS.map((h) => h.waveBuoy?.station).filter((s): s is string => !!s),
-    PRIMARY_WAVE_STATION,
-    ...WIND_FALLBACK,
-  ]);
+  const stations = uniq(
+    HARBORS.flatMap((h) => [h.buoyStation, h.waveBuoy?.station, ...windNeighbors(h)]).filter(
+      (s): s is string => !!s,
+    ),
+  );
   const zones = uniq(HARBORS.map((h) => h.marineZone));
   const grids = uniq(HARBORS.map((h) => h.waveGrid));
 
@@ -300,7 +301,7 @@ export async function getAllConditions(): Promise<HarborConditions[]> {
 /** Conditions for a single harbor (detail page). */
 export async function getHarborConditions(harbor: Harbor): Promise<Conditions> {
   const stations = uniq(
-    [harbor.buoyStation, harbor.waveBuoy?.station, PRIMARY_WAVE_STATION, ...WIND_FALLBACK].filter(
+    [harbor.buoyStation, harbor.waveBuoy?.station, ...windNeighbors(harbor)].filter(
       (s): s is string => !!s,
     ),
   );
@@ -329,7 +330,11 @@ export async function persistSnapshots(list: HarborConditions[]): Promise<{ pers
   const snapRows = HARBORS.map((h) => {
     const c = list.find((x) => x.id === h.id)!.conditions;
     const baseline = rate(h, c, boat, DEFAULT_SKILL).status;
-    if (c.source && !h.windFromGrid && !seenStations.has(c.source)) {
+    // An observations row is filed only for the harbor's OWN station. A borrowing harbor's
+    // conditions carry its own blended waves and possibly the model's gust, so filing them
+    // under a neighbour's id (or "NWS model" as if it were a station) would corrupt that
+    // station's record. The owner writes its own row; borrowed readings live in snapshots.
+    if (c.source && !h.windFromGrid && c.source === h.buoyStation && !seenStations.has(c.source)) {
       seenStations.add(c.source);
       obsRows.push({
         station: c.source,
