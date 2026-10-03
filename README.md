@@ -314,7 +314,11 @@ Two checks with different jobs:
   platform lacks is **declared** (`SENSORLESS`), never inferred. The job returns 503 when any
   NDBC station is dark or has a dead depended-on column, or when a Spotter that supplies *wind*
   is. Expect a seasonal 503 when such a Spotter is pulled for the winter. `/health` itself is
-  public (only the cron route is guarded) and runs a live check on every load.
+  public (only the cron route is guarded) but marked `noindex`, and runs a live check on every
+  load against cached feeds (5 min NDBC, 15 min GLOS). GLOS is asked only for the series each
+  harbor declares: unfiltered, a Spotter's 14 days ran past Next's 2 MB cache limit, so every
+  load re-downloaded ~10 MB, and the 2026-09-21 weekly "503" was that download OOM-killing
+  the function.
 - **`npm run validate:stations`** — *does each station still agree with its neighbours?* It
   tests the source each harbor actually rates from against the nearest independent reference
   over 10 days, and fails on anything reading below 0.7× a real anemometer — the direction that
@@ -363,7 +367,9 @@ of them are reporting right now.
   browser push for watched harbors.
 - Fix the known issues above; tune exposure values with local input.
 - More Great Lakes harbors; water-level / seiche data.
-- Move to Node 24 before Node 22 stops being patched (2027-04-30).
+- Move to Node 24 in the off-season, **January–March 2027** — before Node 22 stops being
+  patched (2027-04-30). Bump local Node first, then `engines.node`; afterwards compare the
+  poll's per-attempt failures and `Memory limit` log lines, not just page loads.
 
 ---
 

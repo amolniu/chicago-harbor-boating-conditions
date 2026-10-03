@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { getGlosCurrent } from "./glos";
+import { getGlosCurrent, obsUrl } from "./glos";
 
 const REF = { datasetId: 1, waveId: 10, periodId: 11, dirId: 12, tempId: 13 };
 
@@ -17,6 +17,32 @@ function stub(points: Record<number, number>) {
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("obsUrl", () => {
+  // Unfiltered, /obs returns every series a Spotter carries: 14 days of it ran 1.6-3.7 MB,
+  // over Next's 2 MB cache limit, so /health re-downloaded ~10 MB per render and the weekly
+  // job was OOM-killed (2026-09-21). Only the declared series may be requested.
+  it("asks only for the series the ref declares", () => {
+    const u = new URL(obsUrl(REF, "2026-10-01"));
+    expect(u.searchParams.get("obsDatasetId")).toBe("1");
+    expect(u.searchParams.get("startDate")).toBe("2026-10-01");
+    expect(u.searchParams.get("parameterId")).toBe("10,11,12,13");
+  });
+
+  it("includes the wind series only when a ref declares one, and never 'undefined'", () => {
+    expect(new URL(obsUrl({ datasetId: 2, waveId: 20 }, "2026-10-01")).searchParams.get("parameterId")).toBe("20");
+    const wind = obsUrl({ ...REF, windId: 14 }, "2026-10-01");
+    expect(new URL(wind).searchParams.get("parameterId")).toBe("10,11,12,13,14");
+    expect(wind).not.toMatch(/undefined|null/);
+  });
+
+  it("is what getGlosCurrent actually fetches", async () => {
+    stub({ 10: 0.5 });
+    await getGlosCurrent(REF);
+    const called = String(vi.mocked(fetch).mock.calls[0][0]);
+    expect(new URL(called).searchParams.get("parameterId")).toBe("10,11,12,13");
+  });
+});
 
 describe("getGlosCurrent", () => {
   it("converts metres to feet and KELVIN to Fahrenheit", async () => {
