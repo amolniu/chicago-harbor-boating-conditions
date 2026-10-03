@@ -14,7 +14,7 @@ import {
   type HealthColumn,
 } from "./stationHealth";
 import type { BuoyRow } from "./ndbc";
-import { HARBORS, WIND_FALLBACK } from "./harbors";
+import { HARBORS } from "./harbors";
 
 const H = 3600_000;
 const NOW = Date.UTC(2026, 8, 4, 12, 0, 0);
@@ -58,6 +58,20 @@ describe("assessStation", () => {
     // The CHII2 lesson: live conditions look fine because of the fallback chain,
     // which is exactly why the outage went unnoticed for 16 days.
     expect(r.findings[0]).toMatch(/history freezes/);
+  });
+
+  it("says which harbors have NO neighbour and are now on their model", () => {
+    // A dark 45161: Grand Haven, Muskegon and Whitehall have no same-shore station in
+    // reach, so they drop to the gridpoint model. Reporting "they fall back to a
+    // neighbour" would be false reassurance about three harbors.
+    const users = ["grand-haven", "muskegon", "whitehall"];
+    const dark = assessStation("45161", rows(200, DARK_AGE_H + 400), WIND, users, NOW);
+    expect(dark.findings[0]).toMatch(/grand-haven, muskegon, whitehall have no neighbour in reach/);
+    expect(dark.findings[0]).toMatch(/gridpoint model/);
+    // Whereas 45198's harbors all have a same-shore neighbour to borrow from.
+    const chicago = assessStation("45198", rows(200, DARK_AGE_H + 400), WIND, ["belmont", "montrose"], NOW);
+    expect(chicago.findings[0]).toMatch(/2 of its harbors borrow from a same-shore neighbour/);
+    expect(chicago.findings[0]).not.toMatch(/gridpoint model/);
   });
 
   it("catches a fresh feed with a DEAD column — the 45198 case", () => {
@@ -247,13 +261,23 @@ describe("the validator tests each harbor's LIVE wind source", () => {
     expect(windSourceOf(harbor("kewaunee")).kind).toBe("model");
   });
 
-  it("puts the Chicago fallback chain AHEAD of a Spotter, as assemble() does", () => {
-    // A harbor with a Spotter windId but without windFromGrid: assemble() rates it from
-    // CNII2 & co. whenever any of them is live, and reaches the Spotter only if all are
-    // dark. Naming the Spotter here would validate a source the app isn't using — the
-    // very bug this module exists to prevent. (No harbor is configured like this today.)
-    const h = { ...harbor("escanaba"), windFromGrid: undefined };
-    expect(windSourceOf(h)).toEqual({ kind: "ndbc", station: WIND_FALLBACK[0] });
+  it("puts a same-shore neighbour AHEAD of a Spotter, as assemble() does", () => {
+    // A station-less harbor with a Spotter windId but without windFromGrid: assemble()
+    // rates it from its nearest same-shore station whenever that is live, and reaches the
+    // Spotter only if every neighbour is dark. Naming the Spotter here would validate a
+    // source the app isn't using — the very bug this module exists to prevent. (No harbor
+    // is configured like this today.) Grand Haven without its own 45161: the nearest
+    // east-shore station within reach is... 45161 itself, now as a neighbour.
+    const spotter = { datasetId: 671, waveId: 1, windId: 2 };
+    const h = { ...harbor("grand-haven"), buoyStation: undefined, windFromGrid: undefined, waveBuoy: { km: 8, glos: spotter } };
+    expect(windSourceOf(h)).toEqual({ kind: "ndbc", station: "45161" });
+  });
+
+  it("falls to the Spotter, then the model, when no same-shore neighbour is in reach", () => {
+    // Escanaba (Green Bay) has no shore chain, with or without windFromGrid.
+    expect(windSourceOf({ ...harbor("escanaba"), windFromGrid: undefined }).kind).toBe("spotter");
+    const noSpotter = { ...harbor("escanaba"), waveBuoy: undefined };
+    expect(windSourceOf(noSpotter).kind).toBe("model");
   });
 
   it("never offers ANY harbor its own wind source as a reference", () => {
@@ -379,11 +403,11 @@ describe("stationUsage", () => {
   });
 
   it("does not attribute waves to a wind-only station", () => {
-    // CNII2 is a lakefront met station in WIND_FALLBACK with no wave sensor. Columns
+    // CHII2 is a crib met station (a Chicago-shore neighbour) with no wave sensor. Columns
     // must follow the role, or the checker grades a station on data nobody reads.
     // (The mirror case — a wave-only station — no longer exists: every waveBuoy is
     // now also somebody's wind source, which is why this asserts the other direction.)
-    const u = stationUsage().find((s) => s.station === "CNII2")!;
+    const u = stationUsage().find((s) => s.station === "CHII2")!;
     expect(u.columns).toContain("windKt");
     expect(u.columns).not.toContain("waveFt");
   });

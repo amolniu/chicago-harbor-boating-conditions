@@ -154,11 +154,14 @@ only the radar and webcam images directly.
 **How a harbor's conditions are assembled** (`lib/conditions.ts`):
 
 - **Wind** — speed, direction and gust each resolve independently, because a station can lose
-  one sensor and keep the rest: the harbor's own station first, then (unless the harbor opts into
-  `windFromGrid`) the Chicago lakefront stations. Failing those, a validated Spotter's speed
-  (direction and gust from the model), then — for `windFromGrid` harbors only — the gridpoint
-  model. Elsewhere the model fills in just a missing direction. A borrowed gust below the
-  sustained wind is dropped.
+  one sensor and keep the rest: the harbor's own station first, then its **same-shore
+  neighbours** within reach (85 km on the west shore, 60 km on the east — set by measuring
+  how well station pairs track), nearest first (`windNeighbors` — none for `windFromGrid`
+  harbors). Failing those, a validated Spotter's speed (direction and gust from the model),
+  then the harbor's own gridpoint model. A harbor **never borrows from across the lake**: with
+  no same-shore station in reach, it goes to its model. A borrowed gust below the sustained
+  wind is dropped; with no station gust in reach, the model's is used only if it is higher.
+  Waves and water temperature fall back along the same same-shore chain.
 - **Waves** — an observed wave (NDBC buoy or Spotter) is blended with the model, weighted by
   distance: 0.85 observation at the harbor, falling to 0.45 at 30 km or more.
 - **Freshness** — a source that has gone quiet reads as *absent*, never as current, so ratings
@@ -357,8 +360,12 @@ of them are reporting right now.
 - With no wind direction the **rating** assumes the worst, but **Harbor intelligence** shows the
   entrance as "Clear".
 - Harbors without their own NDBC station show no 24-hour wind chart.
-- A harbor without `windFromGrid` whose own station goes dark borrows wind from the Chicago
-  lakefront stations — up to ~200 km away for Southport and the Michigan east-shore harbors.
+- The gridpoint model's wind has been checked at only two sites: ~1.10× the buoy at Kewaunee
+  (24 h) and 0.72× an anemometer on Green Bay (14 days). Every harbor now falls back to it when
+  its own shore has no station in reach — Grand Haven, Muskegon and Whitehall whenever 45161
+  is out — so it matters more than it did, and the east-shore gridpoints are unmeasured.
+- Neighbour stations are measured once (`NEIGHBOR_STATIONS`), not re-checked: the validator
+  tests each harbor's own source, not the stations it would borrow from.
 - Some copy still says "sailor" / "sail window" where it should be craft-neutral.
 
 ## Roadmap

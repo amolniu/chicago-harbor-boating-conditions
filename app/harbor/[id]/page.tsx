@@ -9,7 +9,7 @@ import { ScoreBars } from "@/components/ScoreBars";
 import { WindChart } from "@/components/WindChart";
 import { HourStrip } from "@/components/HourStrip";
 import { STATUS_META, statusLabel } from "@/components/status-meta";
-import { getHarbor } from "@/lib/harbors";
+import { getHarbor, windNeighbors } from "@/lib/harbors";
 import { rate } from "@/lib/rating";
 import { computeWindow } from "@/lib/window";
 import { greenStreak, roughnessPercentile, rateDay, dateMinus, type DaySummary } from "@/lib/history";
@@ -125,7 +125,14 @@ export default function HarborDetail() {
             <div className="font-mono text-2xl text-fg">{rating.status === "unknown" ? "—" : rating.score}</div>
             <div>
               {c.source}
-              {harbor.buoyStation && c.source !== harbor.buoyStation ? " (nearby)" : ""} ·{" "}
+              {/* "(nearby)" only for a borrowed STATION; the model is a forecast, not a
+                  neighbour, and every harbor can now end there. */}
+              {windNeighbors(harbor).includes(c.source)
+                ? " (nearby)"
+                : harbor.buoyStation && c.source === "NWS model"
+                  ? " (forecast)"
+                  : ""}{" "}
+              ·{" "}
               {c.observedAt ? fmtLocalTime(new Date(c.observedAt)) : "—"}
             </div>
           </div>

@@ -23,7 +23,7 @@
 // exposure model by it. Isomorphic and pure — the fetching lives in the caller.
 
 import type { BuoyRow } from "./ndbc";
-import { HARBORS, WIND_FALLBACK, PRIMARY_WAVE_STATION, type Harbor } from "./harbors";
+import { HARBORS, windNeighbors, type Harbor } from "./harbors";
 import type { GlosWaveRef } from "./glos";
 
 /** The fields the app actually consumes from a station. */
@@ -160,9 +160,9 @@ export interface StationUsage {
  * Which stations the app depends on, and for what.
  *
  * MIRRORS the chains built in lib/conditions.ts assemble(): windChain =
- * [buoyStation, ...WIND_FALLBACK] (empty fallback when windFromGrid), and dataChain
- * adds waveBuoy.station and PRIMARY_WAVE_STATION for waves and water temperature.
- * If those chains change, change this too — the tests pin the parts that matter.
+ * [buoyStation, ...windNeighbors(h)] (same-shore stations; none when windFromGrid), and
+ * dataChain adds waveBuoy.station for waves and water temperature. If those chains
+ * change, change this too — the tests pin the parts that matter.
  *
  * The point of computing usage at all: severity depends on it. 45198 reporting no
  * water temperature is unremarkable; 45198 reporting no wind DIRECTION is critical,
@@ -179,16 +179,14 @@ export function stationUsage(): StationUsage[] {
   };
 
   for (const h of HARBORS) {
-    const fallback = h.windFromGrid ? [] : WIND_FALLBACK;
+    const neighbors = windNeighbors(h);
     // Wind chain: every station in it can end up supplying speed, direction or gust,
     // since those now resolve independently.
-    for (const s of [h.buoyStation, ...fallback]) touch(s, ["windDir", "windKt", "gustKt"], h.id);
+    for (const s of [h.buoyStation, ...neighbors]) touch(s, ["windDir", "windKt", "gustKt"], h.id);
     // A dedicated wave buoy supplies waves and leads for water temperature.
     touch(h.waveBuoy?.station, ["waveFt", "waterTempF"], h.id);
     // Water temp and wave fallbacks walk the wider data chain.
-    for (const s of [h.buoyStation, ...(h.windFromGrid ? [] : [PRIMARY_WAVE_STATION]), ...fallback]) {
-      touch(s, ["waterTempF"], h.id);
-    }
+    for (const s of [h.buoyStation, ...neighbors]) touch(s, ["waterTempF"], h.id);
   }
 
   // GLOS Spotters, as their own source kind. They were invisible to this check until
@@ -286,10 +284,26 @@ export function assessStation(
             : ` for waves/temperature, which fall back to the gridpoint model.`),
       );
     } else {
+      // Say what the outage actually does to the harbors whose OWN station this is. Since
+      // 2026-10-03 not all of them have a neighbour to borrow from: a dark 45161 puts Grand
+      // Haven, Muskegon and Whitehall on their gridpoint model, which is not the same as
+      // "a neighbour covers it" and must not be reported as if it were.
+      const own = usedBy.filter((id) => HARBORS.find((h) => h.id === id)?.buoyStation === station);
+      const onModel = own.filter((id) => {
+        const h = HARBORS.find((x) => x.id === id);
+        return !h || windNeighbors(h).length === 0;
+      });
+      const borrowing = own.length - onModel.length;
+      const effects = [
+        borrowing ? `${borrowing} of its harbors borrow from a same-shore neighbour` : "",
+        onModel.length
+          ? `${onModel.join(", ")} ${onModel.length === 1 ? "has" : "have"} no neighbour in reach and now rate on the gridpoint model`
+          : "",
+      ].filter(Boolean);
       findings.push(
         `no rows for ${age} — whole-station outage` +
           (usedBy.length
-            ? `; ${nHarbors} fall${usedBy.length === 1 ? "s" : ""} back to a neighbour, so live conditions look fine while history freezes`
+            ? `; ${effects.length ? effects.join("; ") + ", so" : ""} live conditions stay up while this station's own history freezes`
             : ""),
       );
     }
@@ -410,8 +424,8 @@ export function assessDrift(
 
 /**
  * Where a harbor's live wind SPEED comes from, in the precedence assemble() applies: its
- * own NDBC station; else, unless windFromGrid, the Chicago fallback chain; else a
- * validated Spotter (`glos.windId`); else the gridpoint model.
+ * own NDBC station; else its nearest same-shore neighbour (windNeighbors — none when
+ * windFromGrid); else a validated Spotter (`glos.windId`); else the gridpoint model.
  *
  * The validator must test THIS — not whatever the config happens to name. Until
  * 2026-10-02 it assumed "no buoyStation ⇒ model", so Escanaba and Gladstone, which rate
@@ -426,10 +440,11 @@ export type WindSource =
 
 export function windSourceOf(h: Harbor): WindSource {
   if (h.buoyStation) return { kind: "ndbc", station: h.buoyStation };
-  // Not windFromGrid ⇒ assemble()'s wind chain is the Chicago fallback, and ANY live
-  // reading there wins before a Spotter is even consulted — so the Spotter must not be
-  // named here first. No harbor is configured this way today.
-  if (!h.windFromGrid) return { kind: "ndbc", station: WIND_FALLBACK[0] };
+  // A same-shore neighbour is in assemble()'s wind chain, and ANY live reading there
+  // wins before a Spotter is even consulted — so the Spotter must not be named here
+  // first. No harbor is configured this way today (station-less harbors are windFromGrid).
+  const [nearest] = windNeighbors(h);
+  if (nearest) return { kind: "ndbc", station: nearest };
   const g = h.waveBuoy?.glos;
   if (g?.windId != null) return { kind: "spotter", ref: { ...g, windId: g.windId } };
   return { kind: "model", grid: h.waveGrid };

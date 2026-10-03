@@ -30,11 +30,12 @@ export interface Harbor {
   /** Nearest NDBC station for localized wind/temp. Optional: buoy-less harbors
    *  (windFromGrid) omit it and take live wind from their gridpoint model instead. */
   buoyStation?: string;
-  /** FALL BACK to this harbor's own NWS gridpoint model for live wind when no buoy
-   *  reading is available — for regions with no usable wind buoy (e.g. much of Green
-   *  Bay), or where the only nearby station reports intermittently. A fresh
-   *  `buoyStation` reading always wins; the model just fills the gap instead of the
-   *  harbor going dark. Waves still come from the gridpoint. */
+  /** Borrow from NO neighbouring station: when this harbor's own sources (buoyStation,
+   *  Spotter) are quiet, go straight to its own NWS gridpoint model — for regions with
+   *  no usable wind buoy (e.g. much of Green Bay), or where the only nearby station
+   *  reports intermittently. A fresh `buoyStation` reading always wins. Every harbor
+   *  ends at its model anyway; this flag only skips the same-shore neighbours
+   *  (windNeighbors) in between. */
   windFromGrid?: boolean;
   /** Optional dedicated wave source sitting right off the harbor. Its OBSERVED wave
    *  height is blended with the gridpoint model for current conditions, weighted by
@@ -73,16 +74,55 @@ export interface Harbor {
   };
 }
 
-// Ordered wind fallbacks for the Chicago-neighborhood harbors, used when a harbor's own
-// station has no wind (e.g. 45198's anemometer drops out while its wave sensor keeps
-// reporting). All within ~10 km, so a neighbour is a fair proxy — far better than going
-// dark. CNII2 (Northerly Island) sits next to the downtown harbors, so it leads.
-// Lives here rather than in conditions.ts so the isomorphic health checker can read the
-// same chain the assembler uses (lib/stationHealth.ts).
-export const WIND_FALLBACK = ["CNII2", "CHII2", "45198", "CMTI2"];
+/** Which side of Lake Michigan a station or harbor sits on. */
+export type Shore = "west" | "east";
 
-/** Chicago Buoy — full wave spectra; the wave fallback for harbors without their own. */
-export const PRIMARY_WAVE_STATION = "45198";
+/**
+ * Stations a harbor may BORROW from when its own station is dark or has lost a sensor —
+ * with where each sits and which shore it is on. See windNeighbors() for the rule.
+ *
+ * Until 2026-10-03 every harbor without windFromGrid borrowed from one global Chicago
+ * list, so a dark 45161 meant Grand Haven, Muskegon and Whitehall rated on Chicago wind
+ * from 170–200 km ACROSS the lake, and Southport on stations 80 km south — a different
+ * weather regime, presented as an observation. Now a harbor borrows only from its own
+ * shore, within MAX_NEIGHBOR_KM, and otherwise falls to its own gridpoint model.
+ *
+ * Proximity is not accuracy, so membership is MEASURED, not assumed. Hourly-matched mean
+ * wind over the ~44 days in each realtime2 file (2026-10-03), neighbour ÷ the primary it
+ * would stand in for:
+ *
+ *   CHII2 → 45198   3 km  1.24×  r 0.92    45186 ↔ 45187  14 km  1.00×  r 0.91
+ *   45198 → 45187  69 km  1.08×  r 0.76    CHII2 → 45187  66 km  1.35×  r 0.75
+ *   45170 → 45026  38 km  1.10×  r 0.77    45168 → 45026  52 km  1.10×  r 0.72
+ *   45168 → 45161  88 km  0.82×  r 0.53    45026 → 45161 136 km  0.77×  r 0.47
+ *
+ * Two stations are deliberately ABSENT because they read low, and borrowing from an
+ * under-reader errs in the dangerous direction — the model is the better last resort:
+ * CMTI2, 0.65× inside sheltered Calumet Harbor (see 59th / jackson-inner), and CNII2 on
+ * Northerly Island, 0.73× the Chicago Buoy 6 km away (r 0.83). CNII2 led the old Chicago
+ * list for years without ever having been checked. Re-measure before adding a station.
+ * Positions: NDBC activestations.xml. Lives here rather than in conditions.ts so the
+ * isomorphic health checker can read the same chains the assembler uses.
+ */
+export const NEIGHBOR_STATIONS: { id: string; lat: number; lon: number; shore: Shore }[] = [
+  { id: "45198", lat: 41.892, lon: -87.563, shore: "west" }, // Chicago Buoy
+  { id: "CHII2", lat: 41.916, lon: -87.572, shore: "west" }, // Harrison-Dever Crib (reads high)
+  { id: "45186", lat: 42.368, lon: -87.795, shore: "west" }, // Waukegan Buoy
+  { id: "45187", lat: 42.491, lon: -87.779, shore: "west" }, // Winthrop Harbor Buoy
+  { id: "45170", lat: 41.755, lon: -86.968, shore: "east" }, // Michigan City Buoy
+  { id: "45026", lat: 41.982, lon: -86.619, shore: "east" }, // Cook Nuclear Plant Buoy
+  { id: "45168", lat: 42.397, lon: -86.331, shore: "east" }, // South Haven Buoy
+  { id: "45161", lat: 43.185, lon: -86.354, shore: "east" }, // Muskegon Buoy
+];
+
+/** Furthest a borrowed reading may come from, per shore — set from the table above, not
+ *  from geometry. On the west shore, pairs 66–69 km apart still track (r ≈ 0.75, and read
+ *  slightly HIGH), as well as the 52–56 km pairs do; 85 km lets Southport and North Point
+ *  reach the Chicago crib and buoy when both north-shore buoys are out (they are deployed
+ *  and pulled on the same days) instead of an MKX model seen reading 0.24× in an onshore
+ *  wind. On the east shore, the 88 km pairs barely track (r ≈ 0.5), so it stays at 60 —
+ *  the reference cap the station validator uses. Beyond the reach, the model. */
+export const MAX_NEIGHBOR_KM: Record<Shore, number> = { west: 85, east: 60 };
 
 export const DEFAULT_DISCUSSION_OFFICE = "LOT";
 export const DEFAULT_RADAR_STATION = "KLOT";
@@ -191,7 +231,7 @@ export const HARBORS: Harbor[] = [
     // 45198, not CHII2: the Harrison-Dever Crib station (GLERL) went whole-station dark
     // 2026-08-18 with no retirement notice - live wind fell back fine, but history froze.
     // The Chicago Buoy is 7-10 km out, already this harbor's wave source, and validated
-    // 1.01x. CHII2 stays in WIND_FALLBACK as a backup if GLERL revives it.
+    // 1.01x. CHII2 stays a same-shore neighbour (NEIGHBOR_STATIONS) as a backup.
     buoyStation: "45198",
     waveBuoy: { station: "45198", km: 10 },
     marineZone: "LMZ742",
@@ -212,7 +252,7 @@ export const HARBORS: Harbor[] = [
     // 45198, not CHII2: the Harrison-Dever Crib station (GLERL) went whole-station dark
     // 2026-08-18 with no retirement notice - live wind fell back fine, but history froze.
     // The Chicago Buoy is 7-10 km out, already this harbor's wave source, and validated
-    // 1.01x. CHII2 stays in WIND_FALLBACK as a backup if GLERL revives it.
+    // 1.01x. CHII2 stays a same-shore neighbour (NEIGHBOR_STATIONS) as a backup.
     buoyStation: "45198",
     waveBuoy: { station: "45198", km: 8 },
     marineZone: "LMZ742",
@@ -233,7 +273,7 @@ export const HARBORS: Harbor[] = [
     // 45198, not CHII2: the Harrison-Dever Crib station (GLERL) went whole-station dark
     // 2026-08-18 with no retirement notice - live wind fell back fine, but history froze.
     // The Chicago Buoy is 7-10 km out, already this harbor's wave source, and validated
-    // 1.01x. CHII2 stays in WIND_FALLBACK as a backup if GLERL revives it.
+    // 1.01x. CHII2 stays a same-shore neighbour (NEIGHBOR_STATIONS) as a backup.
     buoyStation: "45198",
     waveBuoy: { station: "45198", km: 8 },
     marineZone: "LMZ742",
@@ -382,11 +422,10 @@ export const HARBORS: Harbor[] = [
   // offshore/calm; NE–E is the onshore wave-maker) — openWaterBearing stays unset.
   // The two southern harbors remain LOT/KLOT (defaults); Kenosha and Winthrop Harbor
   // cross into Wisconsin waters → MKX office + KMKX radar, and Kewaunee further north
-  // is GRB + KGRB. Wind comes from CHII2 (south) or the nearest wind buoy 45199
-  // (north) — except Kewaunee, whose only nearby station is too sheltered to trust
-  // (see below), so it takes the gridpoint model. The wave-only buoys offshore
-  // (45186/45187) supply OBSERVED
-  // waves via waveBuoy. No representative lakefront cam up here, so all hide the panel.
+  // is GRB + KGRB. Wind comes from the offshore buoys 45186 / 45187, which also supply
+  // OBSERVED waves via waveBuoy — except Kewaunee, whose only nearby station is too
+  // sheltered to trust (see below), so it takes the gridpoint model. No representative
+  // lakefront cam up here, so all hide the panel.
   {
     id: "kewaunee",
     waveGrid: "GRB/98,30",
@@ -853,4 +892,40 @@ const REGION_OF: Record<string, RegionId> = Object.fromEntries(
 /** The region a harbor belongs to (undefined if it hasn't been assigned one). */
 export function regionOf(id: string): RegionId | undefined {
   return REGION_OF[id];
+}
+
+/** The shore each region's harbors sit on. Green Bay has none: every harbor there is
+ *  windFromGrid, and its two stations serve only their own harbors. */
+const SHORE_OF_REGION: Partial<Record<RegionId, Shore>> = {
+  chicago: "west",
+  "north-shore": "west",
+  "michigan-east": "east",
+};
+
+const kmBetween = (aLat: number, aLon: number, bLat: number, bLon: number) => {
+  const R = 6371, p = Math.PI / 180;
+  return 2 * R * Math.asin(Math.sqrt(
+    Math.sin(((bLat - aLat) * p) / 2) ** 2 +
+    Math.cos(aLat * p) * Math.cos(bLat * p) * Math.sin(((bLon - aLon) * p) / 2) ** 2));
+};
+
+/**
+ * The stations this harbor may borrow wind (and waves / water temp) from, nearest first:
+ * same shore, within that shore's MAX_NEIGHBOR_KM, never its own station. After these,
+ * the harbor falls back to its gridpoint model — never to the far side of the lake.
+ *
+ * windFromGrid harbors borrow nothing: the flag means "when my own sources are quiet, use
+ * my model", which is exactly where a harbor with no trustworthy neighbour belongs.
+ */
+export function windNeighbors(h: Harbor): string[] {
+  if (h.windFromGrid) return [];
+  const shore = SHORE_OF_REGION[regionOf(h.id) as RegionId];
+  if (!shore) return [];
+  const own = h.buoyStation?.toUpperCase();
+  return NEIGHBOR_STATIONS
+    .filter((s) => s.shore === shore && s.id !== own)
+    .map((s) => ({ id: s.id, km: kmBetween(h.lat, h.lon, s.lat, s.lon) }))
+    .filter((s) => s.km <= MAX_NEIGHBOR_KM[shore])
+    .sort((a, b) => a.km - b.km)
+    .map((s) => s.id);
 }
