@@ -5,12 +5,16 @@ import {
   stationUsage,
   summarize,
   DARK_AGE_H,
+  MIN_DRIFT_SPAN_H,
   SENSORLESS,
   isSpotterReference,
   DRIFT_MARK,
+  windSourceOf,
+  isEligibleReference,
   type HealthColumn,
 } from "./stationHealth";
 import type { BuoyRow } from "./ndbc";
+import { HARBORS, WIND_FALLBACK } from "./harbors";
 
 const H = 3600_000;
 const NOW = Date.UTC(2026, 8, 4, 12, 0, 0);
@@ -211,6 +215,98 @@ describe("assessDrift", () => {
 
   it("stays quiet on thin samples", () => {
     expect(assessDrift("X", [5], "R", 5, [10]).status).toBe("insufficient");
+  });
+
+  it("won't judge a ratio the two series share for only a few hours", () => {
+    // Plenty of samples, too little time: a buoy recovered near the end of the window can
+    // leave two shared hours, and one day was already shown to swing healthy stations
+    // across RATIO_LOW. The same numbers fail once they span long enough to mean something.
+    expect(assessDrift("X", many(5), "45186", 13, many(10), 2).status).toBe("insufficient");
+    expect(assessDrift("X", many(5), "45186", 13, many(10), MIN_DRIFT_SPAN_H).status).toBe("under");
+  });
+});
+
+describe("the validator tests each harbor's LIVE wind source", () => {
+  const harbor = (id: string) => HARBORS.find((h) => h.id === id)!;
+
+  it("names the Spotter for Escanaba and Gladstone, not their unused model", () => {
+    // Until 2026-10-02 the validator assumed "no buoyStation ⇒ model" and so tested a
+    // model these two harbors only fall back to — on too few model samples to ever pass
+    // or fail. The Spotter they actually rate from was never checked.
+    for (const id of ["escanaba", "gladstone"]) {
+      const s = windSourceOf(harbor(id));
+      expect(s.kind, id).toBe("spotter");
+      if (s.kind === "spotter") expect(s.ref.datasetId, id).toBe(695);
+    }
+  });
+
+  it("follows assemble()'s precedence: own station, then Spotter, then model", () => {
+    // Fayette names FPTM4 AND opts into windFromGrid; the station still leads.
+    expect(windSourceOf(harbor("fayette"))).toEqual({ kind: "ndbc", station: "FPTM4" });
+    expect(windSourceOf(harbor("belmont"))).toEqual({ kind: "ndbc", station: "45198" });
+    expect(windSourceOf(harbor("kewaunee")).kind).toBe("model");
+  });
+
+  it("puts the Chicago fallback chain AHEAD of a Spotter, as assemble() does", () => {
+    // A harbor with a Spotter windId but without windFromGrid: assemble() rates it from
+    // CNII2 & co. whenever any of them is live, and reaches the Spotter only if all are
+    // dark. Naming the Spotter here would validate a source the app isn't using — the
+    // very bug this module exists to prevent. (No harbor is configured like this today.)
+    const h = { ...harbor("escanaba"), windFromGrid: undefined };
+    expect(windSourceOf(h)).toEqual({ kind: "ndbc", station: WIND_FALLBACK[0] });
+  });
+
+  it("never offers ANY harbor its own wind source as a reference", () => {
+    // The invariant, over every harbor, so this class of bug cannot come back for a
+    // new one. Each source is offered in every guise it appears under: as an NDBC id,
+    // as the GLOS mirror of that id, and as a GLOS dataset under an id we can't predict.
+    for (const h of HARBORS) {
+      const s = windSourceOf(h);
+      const guises =
+        s.kind === "ndbc"
+          ? [{ id: s.station }, { id: s.station.toLowerCase() }, { id: s.station, datasetId: 9999 }]
+          : s.kind === "spotter"
+            ? [
+                { id: "SPOT-33254C", datasetId: s.ref.datasetId },
+                { id: "glos-platform", datasetId: s.ref.datasetId },
+                { id: "45999", spotter: true }, // the same Spotter, should NDBC ever list it
+              ]
+            : [];
+      for (const p of guises) expect(isEligibleReference(h, p), `${h.id} vs ${JSON.stringify(p)}`).toBe(false);
+    }
+  });
+
+  it("the real circular pair is now refused", () => {
+    // Exactly what the live run printed for Escanaba: its source, SPOT-33254C (ds 695),
+    // offered back to it as the "nearest independent buoy".
+    expect(isEligibleReference(harbor("escanaba"), { id: "SPOT-33254C", datasetId: 695 })).toBe(false);
+  });
+
+  it("gives a Spotter only anemometer references", () => {
+    // SPOT-30364R sits 16 km from the Bay de Noc Spotter — nearer than any anemometer —
+    // and would have been the next pick. Same bias, and assessDrift won't fail against a
+    // Spotter, so that row could never fail either. FPTM4 is what it was validated against.
+    const h = harbor("escanaba");
+    expect(isEligibleReference(h, { id: "SPOT-30364R", datasetId: 581 })).toBe(false);
+    expect(isEligibleReference(h, { id: "FPTM4" })).toBe(true);
+    expect(isEligibleReference(h, { id: "45002", datasetId: 118 }), "a mirrored NDBC anemometer").toBe(true);
+  });
+
+  it("recognises a Spotter NDBC lists under a plain numeric id", () => {
+    // 45214 is NDBC's "South Michigan Spotter" — a numeric id, no SPOT- prefix, no GLOS
+    // dataset. Without the flag both Spotter guards are blind to it in the anemometer pool.
+    const h = harbor("escanaba");
+    expect(isEligibleReference(h, { id: "45214", spotter: true })).toBe(false);
+    // The flag is only a bar for Spotter SOURCES: an anemometer may still use one.
+    expect(isEligibleReference(harbor("fayette"), { id: "45214", spotter: true })).toBe(true);
+  });
+
+  it("leaves an anemometer harbor's references as they were", () => {
+    // Spotters stay legitimate references for real anemometers — assessDrift already
+    // knows how to read them — and the GLOS mirror of the harbor's own buoy stays out.
+    const h = harbor("fayette");
+    expect(isEligibleReference(h, { id: "SPOT-33254C", datasetId: 695 })).toBe(true);
+    expect(isEligibleReference(h, { id: "fptm4" })).toBe(false);
   });
 });
 

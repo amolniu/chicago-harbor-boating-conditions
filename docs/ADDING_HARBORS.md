@@ -106,8 +106,9 @@ for s in KWNW3 MNMM4 SYWW3; do printf "%s " $s; curl -s -o /dev/null -w "%{http_
 bites during research.) There is no alternate endpoint to try: `latest_obs/`, `5day2/`
 and `.spec` are not populated for these stations, so an uppercase 404 is a real gap.
 
-⚠️ **Validate a station against a neighbour over ~24 h before trusting it — proximity
-is not accuracy.** A sheltered station reads LOW, which makes conditions look safer than
+⚠️ **Validate a station against a neighbour over ~10 days before trusting it — proximity
+is not accuracy.** (Not one day: a lake breeze or a front swings a 24 h ratio across the
+threshold for healthy stations — see `WINDOW_DAYS` in the validator.) A sheltered station reads LOW, which makes conditions look safer than
 they are. Measured ratios (station ÷ offshore buoy, 24 h means):
 
 | Station | Ratio | Verdict |
@@ -117,7 +118,8 @@ they are. Measured ratios (station ÷ offshore buoy, 24 h means):
 | `SVNM4` South Haven (C-MAN light) | 1.09 | fine — an earlier spot-check wrongly condemned it |
 
 So this is **site-specific, not station-class**, and a single instantaneous sample
-misleads in *both* directions. Compare the 24 h means before wiring a station:
+misleads in *both* directions. Compare multi-day means before wiring a station (this
+averages the whole ~45-day realtime2 file):
 
 ```bash
 curl -s "https://www.ndbc.noaa.gov/data/realtime2/KWNW3.txt" | awk 'NR>2 && $7!="MM"{s+=$7;n++} END{print "mean m/s:",s/n," n:",n}'
@@ -180,11 +182,14 @@ of its harbors, so a new harbor lands in the right cell (or opens its own) with 
 npm run validate:stations
 ```
 
-Compares each harbor's configured wind source against the nearest live GLOS **moored
-buoy** over 24 h and fails if anything reads below 0.7× — the direction that makes
-conditions look safer than they are. It is asymmetric on purpose: reading high is merely
-conservative (expected when the reference buoy is further offshore). It hits the network,
-so it is opt-in and never runs in `npm test`.
+Compares the wind source each harbor **actually rates from** (`windSourceOf()`: its NDBC
+station, else a validated Spotter, else the gridpoint model) against the nearest
+independent reference over 10 days, and fails if anything reads below 0.7× — the
+direction that makes conditions look safer than they are. The reference is a live GLOS
+**moored buoy**, or — when the source is itself a Spotter — the nearest **NDBC
+anemometer**. It is asymmetric on purpose: reading high is merely conservative (expected
+when the reference buoy is further offshore). It hits the network, so it is opt-in and
+never runs in `npm test`.
 
 It has already caught two shipped mistakes: `KWNW3` at Kewaunee (0.51×) and `CMTI2` at
 the three south-side Chicago harbors (0.65× — a gauge inside sheltered Calumet Harbor).
@@ -200,6 +205,21 @@ the three south-side Chicago harbors (0.65× — a gauge inside sheltered Calume
   (GLOS republishes NDBC buoys under the same id) and compare it against itself, passing
   it at ~1.00 no matter how badly it read. Any "validated" claim from before that date on
   a mirrored station is worthless — re-run it.
+- Until 2026-10-02 the same blind spot hid **Spotter-sourced** harbors. Escanaba and
+  Gladstone rate from the Bay de Noc Spotter, but the script tested their (unused) model
+  — on too few samples to ever pass or fail — against that very Spotter. A row whose
+  source column reads `SPOT-…` is now the Spotter itself, checked against an anemometer
+  over the span both actually reported (a Spotter pulled mid-window is not compared with
+  ten days of someone else's weather), and skipped once it has been quiet longer than the
+  app tolerates (3 h — the harbor is on the model then). A `!!` there does **not** mean
+  "remove `windId`": the model it would fall back to has read ~0.6–0.72× an anemometer on
+  Green Bay, lower still. Compare the model against the same anemometer first.
+- Which platforms count as independent is decided in one place,
+  `isEligibleReference()` in `lib/stationHealth.ts`, and unit-tested over every harbor.
+  Never the source itself (by NDBC id *or* GLOS dataset id), and never a Spotter for a
+  Spotter: they share the same bias, so a Spotter reference can't give one a verdict.
+  NDBC lists some Spotters under plain numeric ids (45212–45214), so they are recognised
+  by name as well as by the `SPOT-` prefix.
 
 Then load **`/health`** and confirm the new station shows no red columns. The validator
 answers "does it agree with its neighbours?"; `/health` answers "is every column we read
