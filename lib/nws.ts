@@ -143,35 +143,99 @@ export async function getGridpointHourly(grid: string): Promise<ForecastHour[]> 
 }
 
 export interface MarineForecast {
+  /** Most severe hazard the product says is IN EFFECT ("none" when nothing is). */
   advisory: Advisory;
   waveText: string | null;
+  /** The headline that set `advisory`; with nothing in effect, the first headline in the
+   *  product (e.g. a Gale Watch). Informational only — `advisory` is what rates. */
   headline: string | null;
   raw: string | null;
 }
 
-/** Nearshore marine text product → advisory level + a wave-forecast line. */
+// --- Nearshore marine text -------------------------------------------------
+// A hazard is in force only when NWS headlines it, between leading and trailing "...",
+// above the period forecasts:
+//
+//   ...GALE WARNING IN EFFECT FROM 10 PM CDT THIS EVENING THROUGH
+//   SATURDAY AFTERNOON...
+//
+//   .TONIGHT...North winds 15 to 25 kt...
+//
+// The period text also names hazards it is NOT announcing — "A Small Craft Advisory may
+// be needed" for Saturday night, "gales possible" — so matching a phrase anywhere in the
+// product capped harbors for advisories that were never issued. Only headlines count.
+//
+// A headline may wrap, and two may sit on consecutive lines. Period lines start with a
+// single "." so they never match, and a blank line or the next period line ends the
+// search, so an unterminated "..." can't swallow the forecast.
+const HEADLINE = /^[ \t]*\.\.\.((?:[^\n]|\n(?![ \t]*(?:\n|\.)))+?)\.\.\.[ \t]*$/gm;
+
+// Most severe first: a Gale Warning outranks a Small Craft Advisory in the same product.
+// Hurricane Force Wind Warning has no tier of its own, so it ranks with storm.
+//
+// Watches are deliberately absent. A Gale Watch says gales are possible within ~48 h, not
+// that they are blowing now, and this rating answers "should you go out right now?" —
+// the sail window already rates the forecast hours a gale would arrive in. A watch is at
+// most the informational `headline`, when nothing is in effect.
+const IN_EFFECT_TIERS: [Advisory, RegExp][] = [
+  ["storm", /\b(?:STORM|HURRICANE FORCE WIND) WARNING\b/],
+  ["gale", /\bGALE WARNING\b/],
+  ["small_craft", /\bSMALL CRAFT ADVISORY\b/],
+];
+
+// "IN EFFECT", "REMAINS IN EFFECT", "NOW IN EFFECT" — but not "IS CANCELLED", "HAS
+// EXPIRED" or "NO LONGER IN EFFECT". A scheduled hazard ("IN EFFECT FROM 7 PM THIS
+// EVENING") counts from the moment it is issued: the text gives no machine-readable start
+// time, and the product is reissued only every ~6 h, so waiting for the next one could
+// miss the very hours it is in force.
+const isInEffect = (h: string) => /\bIN EFFECT\b/.test(h) && !/\bNO LONGER IN EFFECT\b/.test(h);
+
+/** Every headline in a marine text product, whitespace-collapsed and upper-cased. */
+export function marineHeadlines(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.replace(/\r\n?/g, "\n").matchAll(HEADLINE)) {
+    // Two headlines on one line ("...A... ...B...") arrive as one match.
+    for (const h of m[1].split(/\.{3}\s*\.{3}/)) {
+      const flat = h.replace(/\s+/g, " ").trim().toUpperCase();
+      if (flat) out.push(flat);
+    }
+  }
+  return out;
+}
+
+/** Pure: nearshore marine text product → in-effect advisory level + a wave-forecast line. */
+export function parseMarineForecast(text: string): MarineForecast {
+  const headlines = marineHeadlines(text);
+  const live = headlines.filter(isInEffect);
+  let advisory: Advisory = "none";
+  let headline = headlines[0] ?? null;
+  for (const [level, re] of IN_EFFECT_TIERS) {
+    const h = live.find((x) => re.test(x));
+    if (h) {
+      advisory = level;
+      headline = h;
+      break;
+    }
+  }
+
+  const waveMatch = text.match(/WAVES?\s+[^.\n]*?FT[^.\n]*/i);
+
+  return {
+    advisory,
+    waveText: waveMatch ? waveMatch[0].replace(/\s+/g, " ").trim() : null,
+    headline,
+    raw: text,
+  };
+}
+
+/** Nearshore marine text product for a zone (see parseMarineForecast). */
 export async function getMarineForecast(zone: string): Promise<MarineForecast> {
   const text = await fetchText(
     `https://tgftp.nws.noaa.gov/data/forecasts/marine/near_shore/lm/${zone.toLowerCase()}.txt`,
     1800,
   );
   if (!text) return { advisory: "none", waveText: null, headline: null, raw: null };
-
-  const upper = text.toUpperCase();
-  let advisory: Advisory = "none";
-  if (upper.includes("STORM WARNING")) advisory = "storm";
-  else if (upper.includes("GALE")) advisory = "gale";
-  else if (upper.includes("SMALL CRAFT ADVISORY")) advisory = "small_craft";
-
-  const waveMatch = text.match(/WAVES?\s+[^.\n]*?FT[^.\n]*/i);
-  const headMatch = text.match(/\.\.\.([^.\n]+(?:ADVISORY|WARNING)[^.\n]*)\.\.\./i);
-
-  return {
-    advisory,
-    waveText: waveMatch ? waveMatch[0].replace(/\s+/g, " ").trim() : null,
-    headline: headMatch ? headMatch[1].trim() : null,
-    raw: text,
-  };
+  return parseMarineForecast(text);
 }
 
 export interface Discussion {
