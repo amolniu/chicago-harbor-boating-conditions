@@ -23,7 +23,7 @@
 // exposure model by it. Isomorphic and pure — the fetching lives in the caller.
 
 import type { BuoyRow } from "./ndbc";
-import { HARBORS, WIND_FALLBACK, PRIMARY_WAVE_STATION } from "./harbors";
+import { HARBORS, WIND_FALLBACK, PRIMARY_WAVE_STATION, type Harbor } from "./harbors";
 import type { GlosWaveRef } from "./glos";
 
 /** The fields the app actually consumes from a station. */
@@ -356,16 +356,26 @@ export const DRIFT_MARK: Record<DriftReport["status"], string> = {
 export const RATIO_LOW = 0.7;
 export const RATIO_HIGH = 1.6;
 export const MIN_DRIFT_SAMPLES = 12;
+/** Below this much SHARED time a ratio is weather, not calibration. Measured 2026-09-13
+ *  (the WINDOW_DAYS table in the validator): one day swung healthy stations across
+ *  RATIO_LOW, while three days already landed within ~0.1 of fourteen. Twelve samples
+ *  is only two hours at a 10-minute cadence, so a sample count alone can't ensure this. */
+export const MIN_DRIFT_SPAN_H = 72;
 
+/** `spanH`: how many hours the two series actually share, when the caller knows. */
 export function assessDrift(
   station: string,
   ours: number[],
   reference: string,
   referenceKm: number,
   refValues: number[],
+  spanH?: number,
 ): DriftReport {
   const mean = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
-  const enough = ours.length >= MIN_DRIFT_SAMPLES && refValues.length >= MIN_DRIFT_SAMPLES;
+  const enough =
+    ours.length >= MIN_DRIFT_SAMPLES &&
+    refValues.length >= MIN_DRIFT_SAMPLES &&
+    (spanH == null || spanH >= MIN_DRIFT_SPAN_H);
   const meanKt = ours.length ? mean(ours) : 0;
   const referenceMeanKt = refValues.length ? mean(refValues) : 0;
   const ratio = referenceMeanKt > 0 ? meanKt / referenceMeanKt : 0;
@@ -396,6 +406,79 @@ export function assessDrift(
     finding = `reads ${ratio.toFixed(2)}× ${reference} — conservative, but worth a look if it drifts further.`;
   }
   return { station, reference, referenceKm, samples: Math.min(ours.length, refValues.length), meanKt, referenceMeanKt, ratio, status, finding };
+}
+
+/**
+ * Where a harbor's live wind SPEED comes from, in the precedence assemble() applies: its
+ * own NDBC station; else, unless windFromGrid, the Chicago fallback chain; else a
+ * validated Spotter (`glos.windId`); else the gridpoint model.
+ *
+ * The validator must test THIS — not whatever the config happens to name. Until
+ * 2026-10-02 it assumed "no buoyStation ⇒ model", so Escanaba and Gladstone, which rate
+ * from the Bay de Noc Spotter, had their unused model tested instead, against that very
+ * Spotter, on too few model samples to ever pass or fail: the source those two harbors
+ * actually read was never checked at all.
+ */
+export type WindSource =
+  | { kind: "ndbc"; station: string }
+  | { kind: "spotter"; ref: GlosWaveRef & { windId: number } }
+  | { kind: "model"; grid: string };
+
+export function windSourceOf(h: Harbor): WindSource {
+  if (h.buoyStation) return { kind: "ndbc", station: h.buoyStation };
+  // Not windFromGrid ⇒ assemble()'s wind chain is the Chicago fallback, and ANY live
+  // reading there wins before a Spotter is even consulted — so the Spotter must not be
+  // named here first. No harbor is configured this way today.
+  if (!h.windFromGrid) return { kind: "ndbc", station: WIND_FALLBACK[0] };
+  const g = h.waveBuoy?.glos;
+  if (g?.windId != null) return { kind: "spotter", ref: { ...g, windId: g.windId } };
+  return { kind: "model", grid: h.waveGrid };
+}
+
+/** A platform offered to the validator as an independent wind reference. */
+export interface ReferencePlatform {
+  /** NDBC station id, or a GLOS org_platform_id (`SPOT-…`, or the NDBC id it mirrors). */
+  id: string;
+  /** GLOS obs_dataset_id, for platforms taken from the GLOS catalog. */
+  datasetId?: number;
+  /** A Sofar Spotter under an id that doesn't say so. NDBC lists several under plain
+   *  numeric ids (45212–45214 "… Spotter", and 42358 already publishes WSPD), so the
+   *  `SPOT-` prefix alone cannot be trusted to recognise one. The caller decides this
+   *  from the platform's name; isEligibleReference honours either signal. */
+  spotter?: boolean;
+}
+
+/**
+ * May `p` serve as an independent wind reference for harbor `h`?
+ *
+ * Never the source itself. That is the one rule a drift check rests on, and it has been
+ * broken twice in two different ways:
+ *   • GLOS MIRRORS NDBC buoys under the same id (45026, 45170, 45186, 45187…), so NDBC
+ *     stations were "validated" against themselves and passed at ~1.00 however they read.
+ *   • Escanaba and Gladstone read the Bay de Noc Spotter (GLOS dataset 695), which was
+ *     also their reference. The guard compared NDBC ids only, and a Spotter has none.
+ * So identity is checked on the GLOS dataset id as well as the station id.
+ *
+ * And never a Spotter for a Spotter. Two Spotters share the same 1.1–1.9× upward bias,
+ * so their agreement says nothing about the truth — and assessDrift (rightly) refuses to
+ * fail anything measured against a Spotter, so such a row could never fail. Only a real
+ * anemometer can give a Spotter a verdict, and there the ordinary rule holds cleanly: a
+ * healthy Spotter reads HIGH, so one reading under RATIO_LOW is genuinely broken.
+ */
+export function isEligibleReference(h: Harbor, p: ReferencePlatform): boolean {
+  const src = windSourceOf(h);
+  const id = p.id.trim().toUpperCase();
+  // The harbor's wave buoy has always been excluded alongside its wind station.
+  const selfIds = [src.kind === "ndbc" ? src.station : undefined, h.buoyStation, h.waveBuoy?.station]
+    .filter((s): s is string => !!s)
+    .map((s) => s.toUpperCase());
+  if (selfIds.includes(id)) return false;
+  if (src.kind === "spotter") {
+    if (p.datasetId === src.ref.datasetId) return false;
+    // Also covers the source itself should it ever be listed under a numeric NDBC id.
+    if (p.spotter || isSpotterReference(p.id)) return false;
+  }
+  return true;
 }
 
 export interface HealthSummary {

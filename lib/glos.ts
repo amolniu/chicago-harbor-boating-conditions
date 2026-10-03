@@ -63,8 +63,9 @@ export interface GlosCurrent {
 }
 
 /** Same rule as the buoys: a platform that has gone quiet must read as absent, not as
- *  "conditions right now", so the caller can fall back to the model. */
-const MAX_OBS_AGE_MS = 3 * 3600_000;
+ *  "conditions right now", so the caller can fall back to the model. Exported so the
+ *  station validator applies the same cut-off when deciding a Spotter is off duty. */
+export const MAX_OBS_AGE_MS = 3 * 3600_000;
 
 /** Plausible dominant wave period on the Great Lakes. Spotter peak-period readings spike
  *  to 25-34 s when the sea is nearly flat and the spectral peak lands on noise (observed
