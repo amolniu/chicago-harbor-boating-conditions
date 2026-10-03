@@ -4,12 +4,21 @@
 // sound. The scheduled check at /api/cron/health answers the same question for a
 // machine; this answers it for a person, including WHY each problem matters.
 
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Panel } from "@/components/Panel";
 import { runHealthCheck } from "@/lib/health";
+import { APP_NAME } from "@/lib/brand";
 import type { HealthStatus } from "@/lib/stationHealth";
 
 export const dynamic = "force-dynamic";
+
+// Public on purpose (station ids are in the public repo anyway), but it is an ops page:
+// keep it out of search results rather than have it compete with the board.
+export const metadata: Metadata = {
+  title: `Station health · ${APP_NAME}`,
+  robots: { index: false, follow: false },
+};
 
 const META: Record<HealthStatus, { dot: string; label: string; text: string }> = {
   ok: { dot: "bg-good", label: "Healthy", text: "text-good-fg" },

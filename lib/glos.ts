@@ -88,6 +88,23 @@ interface ObsDataset {
 
 const kelvinToF = (k: number) => ((k - 273.15) * 9) / 5 + 32;
 
+/**
+ * The /obs URL for exactly the series a ref declares.
+ *
+ * Without `parameterId` the API returns EVERY series the platform carries — 14–15 on a
+ * Spotter, of which the app reads at most five — and 14 days of that is 1.6–3.7 MB. Next
+ * refuses to cache a fetch over 2 MB, so those responses were never cached: every /health
+ * render re-downloaded ~9–11 MB, and on 2026-09-21 the weekly health job was OOM-killed
+ * mid-download and reported the crash as a 503. Asking for the declared ids cuts the same
+ * 14 days to ~0.5 MB (dataset 671: 2.74 MB → 0.52 MB). The API takes them comma-separated.
+ */
+export function obsUrl(ref: GlosWaveRef, startDate: string): string {
+  const ids = [ref.waveId, ref.periodId, ref.dirId, ref.tempId, ref.windId].filter(
+    (id): id is number => id != null,
+  );
+  return `${OBS_URL}?obsDatasetId=${ref.datasetId}&startDate=${startDate}&parameterId=${ids.join(",")}`;
+}
+
 /** Newest point of a series, or null if it's missing or stale. */
 function newest(params: Map<number, ObsPoint[]>, id: number | undefined, now: number): ObsPoint | null {
   if (id == null) return null;
@@ -121,7 +138,7 @@ export async function getGlosRows(ref: GlosWaveRef, days = 10): Promise<BuoyRow[
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 20_000);
-    const res = await fetch(`${OBS_URL}?obsDatasetId=${ref.datasetId}&startDate=${start}`, {
+    const res = await fetch(obsUrl(ref, start), {
       signal: ctrl.signal,
       next: { revalidate: 900 },
     });
@@ -191,7 +208,7 @@ export async function getGlosCurrent(ref: GlosWaveRef): Promise<GlosCurrent | nu
   try {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 12_000);
-    const res = await fetch(`${OBS_URL}?obsDatasetId=${ref.datasetId}&startDate=${start}`, {
+    const res = await fetch(obsUrl(ref, start), {
       signal: ctrl.signal,
       next: { revalidate: 900 },
     });
