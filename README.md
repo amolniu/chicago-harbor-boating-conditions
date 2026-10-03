@@ -103,15 +103,17 @@ yellow 30–59, red < 30**, and the lowest-scoring metric is named as the limite
 | Trigger | Score capped at |
 |---|---|
 | NWS Tornado, Severe Thunderstorm, Special Marine, Hurricane or Tropical Storm Warning; waterspouts | **0** — outranks every model, and leads the reason |
-| "Storm Warning" in the zone's nearshore marine text | 5 |
+| Storm Warning (or Hurricane Force Wind Warning) **in effect** for the harbor's marine zone | 5 |
 | HRRR thunderstorm **active** (stormy now or next hour) | 8 |
-| "Gale" in the zone's nearshore marine text | 10 |
-| "Small Craft Advisory" in the zone's nearshore marine text | 24 / 48 / 58 by skill, plus up to 20 for a sheltered harbor |
+| Gale Warning **in effect** for the marine zone | 10 |
+| Small Craft Advisory **in effect** for the marine zone | 24 / 48 / 58 by skill, plus up to 20 for a sheltered harbor |
 | NWS Tornado or Severe Thunderstorm **Watch**; HRRR storm **elevated** (next 6 h) | 45 |
 
-⚠️ The marine-text caps match those phrases *anywhere* in the zone forecast — including
-"a Small Craft Advisory may be needed" for a later period — so a harbor can be capped for an
-advisory that is not yet in effect. A known bug; see [Known issues](#known-issues).
+The three marine caps come only from the `...X IN EFFECT...` headlines of the zone's
+nearshore marine text (`lib/nws.ts`); when several are up, the most severe wins. Wording in the
+period forecasts — "a Small Craft Advisory may be needed" Saturday night, "gales possible" —
+caps nothing, and neither does a **Gale or Storm Watch**: a watch says the wind is possible
+within ~48 h, not blowing now, and the sail window already rates those hours.
 
 **Unknown wind direction → assume the worst.** If no station or model can supply a bearing,
 exit waves use the harbor's worst exposure over every bearing and the crosswind is taken as the
@@ -140,7 +142,7 @@ only the radar and webcam images directly.
 |---|---|---|
 | **NDBC** realtime2 (`lib/ndbc.ts`) | Wind speed / direction / gust, waves, water and air temp | 5 min cache. A station with nothing in the last 3 h counts as dark. |
 | **NWS gridpoints** (`lib/nws.ts`) | Per-harbor model waves (height / period / direction), wind, 48 h hourly forecast | Each harbor's own cell, 30 min cache. The model half of the wave blend; wind only where no observation exists. |
-| **NWS nearshore marine text** (tgftp) | Wave forecast line; Small Craft Advisory / Gale / Storm Warning | One product per marine zone, 30 min cache. |
+| **NWS nearshore marine text** (tgftp) | Small Craft Advisory / Gale / Storm Warning in effect; wave forecast line | One product per marine zone, 30 min cache. |
 | **NWS active alerts** (`lib/alerts.ts`) | Warnings and watches at each harbor's point | 5 min cache. Drives the 0 / 45 caps above. |
 | **NWS Area Forecast Discussion** | Forecaster reasoning from the harbor's own office | 30 min cache. |
 | **HRRR** (3 km) via **Open-Meteo** (`lib/storm.ts`) | CAPE, precipitation, gusts → thunderstorm risk | Per ~50 km storm cell, 45 min cache. An hour is stormy on CAPE ≥ 500 J/kg with rain, or on ≥ 2.5 mm/h of rain alone (CAPE collapses once a squall is overhead). |
@@ -337,11 +339,10 @@ of them are reporting right now.
 
 ## Known issues
 
-- **Marine advisories are matched too loosely.** The nearshore-text parser caps a harbor
-  whenever "Small Craft Advisory", "Gale" or "Storm Warning" appears anywhere in its zone
-  forecast, including outlook wording such as "may be needed" for a later period. On 2026-10-02
-  this capped Menominee and Sister Bay for an advisory that was not in effect. It should match
-  only the "… IN EFFECT" headline (`lib/nws.ts`).
+- **A scheduled marine advisory caps from the moment it is issued.** A headline such as "Small
+  Craft Advisory in effect from 7 PM Saturday" caps Saturday morning too, because the text
+  product gives no machine-readable start time (`lib/nws.ts`). The NWS alerts API
+  (`/alerts/active?zone=LMZ…`) carries onset and end times and would fix this.
 - **Exposure values are seed data** — geometry and general knowledge, to be refined with local
   sailors' input.
 - **Times are shown in Central time** on the detail page, even for the Michigan harbors that keep
