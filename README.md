@@ -108,12 +108,24 @@ yellow 30–59, red < 30**, and the lowest-scoring metric is named as the limite
 | Gale Warning **in effect** for the marine zone | 10 |
 | Small Craft Advisory **in effect** for the marine zone | 24 / 48 / 58 by skill, plus up to 20 for a sheltered harbor |
 | NWS Tornado or Severe Thunderstorm **Watch**; HRRR storm **elevated** (next 6 h) | 45 |
+| The harbor's **own** buoy or Spotter isn't reporting, so its wind is the forecast model (usually the off-season) | 59 — Caution at best |
 
 The three marine caps come only from the `...X IN EFFECT...` headlines of the zone's
 nearshore marine text (`lib/nws.ts`); when several are up, the most severe wins. Wording in the
 period forecasts — "a Small Craft Advisory may be needed" Saturday night, "gales possible" —
 caps nothing, and neither does a **Gale or Storm Watch**: a watch says the wind is possible
 within ~48 h, not blowing now, and the sail window already rates those hours.
+
+**The off-season.** Seasonal buoys come out of the water from mid-October (2023–25: pulled
+Oct 17 – Nov 25, back Mar 24 – Jun 23), and Spotters likewise. A harbor that normally observes
+its own wind then falls to a same-shore neighbour if one is in reach, else to its forecast
+model — which can read low (0.72× an anemometer on Green Bay), the optimistic direction. So a
+harbor on the model *because it lost its own source* tops out at **Caution** — its sail window
+too — and says so: in its reason, as a pill on its page, and in a board notice listing every
+such harbor in view. The copy names a seasonal pull only when the lost source is a seasonal
+platform; a fixed station going quiet is a fault, not the calendar. Harbors that are
+model-only by design (Kewaunee, Cedar River, Sister Bay) and harbors on a measured neighbour are
+not capped, and history is never re-capped (`forecastWindGap` in `lib/rating.ts`).
 
 **Unknown wind direction → assume the worst.** If no station or model can supply a bearing,
 exit waves use the harbor's worst exposure over every bearing and the crosswind is taken as the
@@ -300,12 +312,30 @@ gcloud scheduler jobs create http harbor-health-weekly --project=mootek-consulti
 
 - **`/api/cron/poll`** snapshots every harbor. Retries make sense: a missed run is a permanent
   hole in the history.
-- **`/api/cron/health`** returns **200 healthy / 503 needs attention**, so a failed job in the
-  console *is* the alert. No retries: a 503 is a finding, not a transient error.
+- **`/api/cron/health`** returns **200 healthy / 503 needs attention**, so a failed job *is* the
+  alert (and it emails — see below). No retries: a 503 is a finding, not a transient error.
 - ⚠️ After creating or rotating either job, **verify its header matches `.env`** (compare
   hashes, never paste the secret). A job with the wrong secret 401s silently every run while
   the site looks perfectly healthy — that happened here.
 - Firebase Hosting caps a proxied request at 60 s, so a longer attempt deadline buys nothing.
+
+### Failure alerts and budget (Cloud Monitoring / Billing)
+
+Set up 2026-10-11 in `mootek-consulting`, emailing one notification channel ("Harbor Report
+alerts"):
+
+- **Harbor Report: scheduled job failed** — log-based: any `ERROR` attempt by
+  `harbor-poll-15min` or `harbor-health-weekly`. It fires per failed **attempt**, even one a retry
+  later rescued, because retries hid a 40% poll failure rate on 2026-10-01. At most one email an
+  hour; auto-closes after a day. A weekly-health 503 lands here too, so a station problem emails.
+- **Harbor Report: function out of memory** — log-based: `Memory limit` on the SSR function.
+- **Budget: $5 / month** on the project, alerting at 50%, 90% and 100% of actual spend and 100% of
+  forecast. A budget only notifies; it never stops anything. It covers everything billed to the
+  project, not just this app.
+
+There is no separate uptime check: the poll goes through the live site every 15 minutes, so a
+site outage fails the poll and alerts. Manage these in the Cloud console (Monitoring → Alerting,
+Billing → Budgets).
 
 ### Station health and validation
 
@@ -316,7 +346,11 @@ Two checks with different jobs:
   carry a dead sensor for weeks (45198 reported wind speed with no direction). Which sensors a
   platform lacks is **declared** (`SENSORLESS`), never inferred. The job returns 503 when any
   NDBC station is dark or has a dead depended-on column, or when a Spotter that supplies *wind*
-  is. Expect a seasonal 503 when such a Spotter is pulled for the winter. `/health` itself is
+  is. **Except in the off-season** (Oct 15 – Jun 30): a platform **declared** seasonal
+  (`SEASONAL_NDBC`, and every Spotter) that goes quiet is shown as *Off-season* and does not fail
+  the job — otherwise it would be red every week from October to June and stop being read. Fixed
+  stations (the Chicago crib, MNMM4, FPTM4) fail in any month, and a seasonal buoy that is still
+  in the water with a dead sensor fails too. `/health` itself is
   public (only the cron route is guarded) but marked `noindex`, and runs a live check on every
   load against cached feeds (5 min NDBC, 15 min GLOS). GLOS is asked only for the series each
   harbor declares: unfiltered, a Spotter's 14 days ran past Next's 2 MB cache limit, so every

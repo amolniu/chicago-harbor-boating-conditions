@@ -115,6 +115,17 @@ export const NEIGHBOR_STATIONS: { id: string; lat: number; lon: number; shore: S
   { id: "45161", lat: 43.185, lon: -86.354, shore: "east" }, // Muskegon Buoy
 ];
 
+/**
+ * NDBC buoys that come OUT OF THE WATER for the winter. Declared, never inferred — same
+ * rule as SENSORLESS: a check cannot tell "pulled for the season" from "broken" by looking
+ * at the data, and guessing either way is how a report learns to lie. GLOS Spotters are
+ * all seasonal and need no entry. Fixed stations (CHII2, MNMM4, FPTM4) are deliberately
+ * absent: a dark crib or C-MAN station is a fault in any month. 45161 has overwintered in
+ * some years (2024) — declaring it costs nothing then. From NDBC's yearly archives,
+ * 2023–25: pulled Oct 17 – Nov 25, redeployed Mar 24 – Jun 23.
+ */
+export const SEASONAL_NDBC = new Set(["45198", "45186", "45187", "45026", "45170", "45168", "45161"]);
+
 /** Furthest a borrowed reading may come from, per shore — set from the table above, not
  *  from geometry. On the west shore, pairs 66–69 km apart still track (r ≈ 0.75, and read
  *  slightly HIGH), as well as the 52–56 km pairs do; 85 km lets Southport and North Point
@@ -769,8 +780,11 @@ export const HARBORS: Harbor[] = [
     windFromGrid: true,
     // First observed waves + water temp anywhere in Green Bay: the Little Bay de Noc
     // Spotter is 8.8 km out, almost exactly on this harbor's fetch axis (bearing 161).
-    // windId: spectral wind speed, validated 2026-09-02 vs the FPTM4 anemometer (1.24x,
-    // conservative) where the model read ~0.6x here. Speed only - direction and gusts
+    // windId: spectral wind speed vs the FPTM4 anemometer, 10-14 day means: 1.24x
+    // (2026-09-02), 0.94x (10-02), 1.25x (10-11) — it swings with the wind regime but stays
+    // well above the model's ~0.6-0.72x here, so it is KEPT as the live source (decided
+    // 2026-10-11). When it is pulled for the winter, the harbor rates on the model capped
+    // at Caution (forecastWindGap in lib/rating.ts). Speed only - direction and gusts
     // stay with the model. KEEP the two ds-695 refs (escanaba/gladstone) IDENTICAL:
     // GLOS fetches dedupe by datasetId, so one ref serves both harbors.
     waveBuoy: { km: 9, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId: 10324, tempId: 10325, windId: 10329, label: "Bay de Noc Spotter" } },
@@ -822,9 +836,9 @@ export const HARBORS: Harbor[] = [
     exposedDirs: ["S", "SSW", "SSE"],
     windFromGrid: true,
     // Shares Escanaba's Little Bay de Noc Spotter, 19 km down the bay on bearing 178.
-    // windId: spectral wind speed, validated 2026-09-02 vs the FPTM4 anemometer (1.24x,
-    // conservative) where the model read ~0.6x here. Speed only - direction and gusts
-    // stay with the model. KEEP the two ds-695 refs (escanaba/gladstone) IDENTICAL:
+    // windId: see Escanaba for the measurements (1.24x / 0.94x / 1.25x FPTM4) and the
+    // decision to keep it; pulled for winter ⇒ model, capped at Caution. Speed only -
+    // direction and gusts stay with the model. KEEP the two ds-695 refs IDENTICAL:
     // GLOS fetches dedupe by datasetId, so one ref serves both harbors.
     waveBuoy: { km: 19, glos: { datasetId: 695, waveId: 10320, periodId: 10321, dirId: 10324, tempId: 10325, windId: 10329, label: "Bay de Noc Spotter" } },
     marineZone: "LMZ221",

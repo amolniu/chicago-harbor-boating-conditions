@@ -5,7 +5,7 @@
 //
 // Server-only.
 
-import { Conditions, type StormRisk } from "./types";
+import { Conditions, type StormRisk, type WindBasis } from "./types";
 import { Harbor, HARBORS, windNeighbors } from "./harbors";
 import { BuoyCurrent, getBuoyCurrent } from "./ndbc";
 import { getMarineForecast, getGridCurrent, type GridCurrent } from "./nws";
@@ -130,6 +130,7 @@ export function assemble(
   let gustKt: number | null;
   let windObservedAt: string | null;
   let windSource: string;
+  let windBasis: WindBasis | undefined;
   // Spectral wind from a validated Spotter (glos.windId): an OBSERVATION, so it beats
   // the model — triangulated 2026-09-02, the gridpoint model read 0.72× a same-site
   // anemometer on Green Bay (optimistic = the dangerous direction) while the Spotter
@@ -154,6 +155,7 @@ export function assemble(
       (gridCurrent?.gustKt != null && gridCurrent.gustKt > wind.value ? gridCurrent.gustKt : null);
     windObservedAt = wb?.observedAt ?? null;
     windSource = wind.station ?? harbor.buoyStation ?? "forecast";
+    windBasis = wind.station === harbor.buoyStation ? "station" : "neighbor";
   } else if (spotterWindKt != null) {
     windDir = gridCurrent?.windDir ?? null;
     windKt = spotterWindKt;
@@ -162,6 +164,7 @@ export function assemble(
     gustKt = gridCurrent?.gustKt != null && gridCurrent.gustKt > spotterWindKt ? gridCurrent.gustKt : null;
     windObservedAt = glos?.windObservedAt ?? null;
     windSource = harbor.waveBuoy?.glos?.label ?? "GLOS buoy";
+    windBasis = "spotter";
   } else if (gridCurrent?.windKt != null) {
     // Every harbor's last resort, not just windFromGrid ones: its own modeled wind beats
     // borrowing a reading from the wrong shore — or showing nothing.
@@ -170,6 +173,7 @@ export function assemble(
     gustKt = gridCurrent?.gustKt ?? null;
     windObservedAt = null; // a model nowcast, not an observation
     windSource = "NWS model";
+    windBasis = "model";
   } else {
     windDir = null;
     windKt = null;
@@ -233,6 +237,7 @@ export function assemble(
     airTempF: pickField(buoys, dataChain, "airTempF").value,
     advisory,
     source: windSource,
+    windBasis,
     observedAt: windObservedAt,
     storm,
     alerts,
