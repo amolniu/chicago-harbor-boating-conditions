@@ -10,7 +10,7 @@ import { WindChart } from "@/components/WindChart";
 import { HourStrip } from "@/components/HourStrip";
 import { STATUS_META, statusLabel } from "@/components/status-meta";
 import { getHarbor, windNeighbors } from "@/lib/harbors";
-import { rate } from "@/lib/rating";
+import { rate, forecastWindGap, lostSourceNote } from "@/lib/rating";
 import { computeWindow } from "@/lib/window";
 import { greenStreak, roughnessPercentile, rateDay, dateMinus, type DaySummary } from "@/lib/history";
 import { harborIntel } from "@/lib/intel";
@@ -79,7 +79,7 @@ export default function HarborDetail() {
   const sail = useMemo(
     () =>
       b && harbor
-        ? computeWindow(harbor, b.forecast, boat, skill, new Date(b.sun.sunrise), new Date(b.sun.sunset), b.stormHours)
+        ? computeWindow(harbor, b.forecast, boat, skill, new Date(b.sun.sunrise), new Date(b.sun.sunset), b.stormHours, b.conditions.windBasis)
         : null,
     [b, harbor, boat, skill],
   );
@@ -87,8 +87,13 @@ export default function HarborDetail() {
   // Re-rated in the browser for the CURRENT boat + skill, like everything else —
   // the server only ships raw per-afternoon summaries.
   const history = useMemo(() => {
-    if (!hist?.enabled || !hist.today || !harbor || !rating) return null;
-    const pct = roughnessPercentile(hist.days, harbor, boat, skill, hist.today, rating.score);
+    if (!hist?.enabled || !hist.today || !harbor || !rating || !b) return null;
+    // Rank like with like: past afternoons are re-rated WITHOUT the forecast-wind cap
+    // (history carries no windBasis), so the live score must be too. The cap says how far
+    // the data can be trusted, not how rough it is — fed in here it made a calm capped
+    // day read "rougher than 100% of afternoons".
+    const nowScore = rate(harbor, { ...b.conditions, windBasis: undefined }, boat, skill).score;
+    const pct = roughnessPercentile(hist.days, harbor, boat, skill, hist.today, nowScore);
     const streak = greenStreak(hist.days, harbor, boat, skill, hist.today);
     // Dots cover the streak's CALENDAR window only — a dark station's stale history
     // must not dress up as "the last 10 afternoons".
@@ -98,7 +103,7 @@ export default function HarborDetail() {
       .map((d) => ({ date: d.date, status: rateDay(d, harbor, boat, skill).status }))
       .reverse();
     return { pct, streak, dots, dayCount: hist.days.length };
-  }, [hist, harbor, boat, skill, rating]);
+  }, [hist, harbor, boat, skill, rating, b]);
 
   if (!harbor) return <NotFound />;
   if (error) return <Message>Couldn&apos;t load this harbor&apos;s data. Try again shortly.</Message>;
@@ -158,6 +163,16 @@ export default function HarborDetail() {
               </span>
             </div>
           ))}
+          {forecastWindGap(harbor, c) && (
+            <div className="inline-flex items-start gap-2 rounded-lg border border-line bg-raised px-3 py-1.5 text-sm text-muted">
+              <span aria-hidden="true">ℹ</span>
+              <span>
+                {forecastWindGap(harbor, c)} isn&apos;t reporting
+                {lostSourceNote(harbor) ? ` (${lostSourceNote(harbor)})` : ""}. Wind here is the NWS forecast
+                model, so this harbor tops out at Caution — the sail window too.
+              </span>
+            </div>
+          )}
           {c.advisory !== "none" && (
             <div className="inline-flex items-center gap-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-1.5 text-sm text-warn-fg">
               ⚠ {ADVISORY_LABEL[c.advisory]} in effect{b.marine.headline ? ` — ${b.marine.headline}` : ""}

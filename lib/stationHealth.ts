@@ -23,7 +23,7 @@
 // exposure model by it. Isomorphic and pure — the fetching lives in the caller.
 
 import type { BuoyRow } from "./ndbc";
-import { HARBORS, windNeighbors, type Harbor } from "./harbors";
+import { HARBORS, windNeighbors, SEASONAL_NDBC, type Harbor } from "./harbors";
 import type { GlosWaveRef } from "./glos";
 
 /** The fields the app actually consumes from a station. */
@@ -90,7 +90,33 @@ export const SENSORLESS: Record<string, HealthColumn[]> = {
 
 export type SourceKind = "ndbc" | "glos";
 
-export type HealthStatus = "ok" | "degraded" | "dark" | "unknown";
+/** `offseason`: a SEASONAL platform gone quiet inside the off-season window — expected,
+ *  reported, and never a failure. Everything else keeps its meaning. */
+export type HealthStatus = "ok" | "degraded" | "dark" | "unknown" | "offseason";
+
+// SEASONAL_NDBC lives in lib/harbors.ts beside the other station facts, because the
+// rating wording needs it too; re-exported here for the health checker and its tests.
+export { SEASONAL_NDBC };
+
+/**
+ * The window in which a quiet seasonal platform is expected, not broken. From NDBC's
+ * yearly archives, 2023–25: buoys were pulled between Oct 17 and Nov 25 and redeployed
+ * between Mar 24 and Jun 23. So Oct 15 → Jun 30, with a little margin. Outside it, a dark
+ * seasonal buoy is still a failure (45170 stopped on 2025-09-16 — worth an alert).
+ */
+export const OFF_SEASON = { from: { month: 10, day: 15 }, to: { month: 6, day: 30 } };
+
+export function inOffSeason(now: number): boolean {
+  const d = new Date(now);
+  const md = (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
+  const from = OFF_SEASON.from.month * 100 + OFF_SEASON.from.day;
+  const to = OFF_SEASON.to.month * 100 + OFF_SEASON.to.day;
+  return md >= from || md <= to; // the window wraps the new year
+}
+
+export function isSeasonal(station: string, kind: SourceKind): boolean {
+  return kind === "glos" || SEASONAL_NDBC.has(station.toUpperCase());
+}
 
 export interface StationReport {
   station: string;
@@ -265,7 +291,51 @@ export function assessStation(
   const findings: string[] = [];
   let status: HealthStatus = "ok";
 
-  if (!rows.length) {
+  // A seasonal platform gone quiet in the off-season — whether its rows are merely old or
+  // its feed window has emptied entirely (14 days for a Spotter, ~45 for an NDBC file) —
+  // is expected. Checked BEFORE the empty-feed case: otherwise two weeks after a Spotter
+  // is pulled it turns "Unreachable — the station id is wrong" and lands in the
+  // needs-attention panel for the rest of the winter.
+  const quietForSeason =
+    isSeasonal(station, kind) && inOffSeason(now) && (!rows.length || (ageHours != null && ageHours > DARK_AGE_H));
+
+  if (quietForSeason) {
+    // Expected: it is out of the water for the winter. Say what that means for its harbors
+    // rather than paint the report red for eight months — a check that is red every week
+    // is one nobody reads, which is how the next real outage goes unseen.
+    status = "offseason";
+    const age =
+      ageHours == null ? "the whole feed window" : ageHours < 48 ? `${ageHours.toFixed(0)} h` : `${(ageHours / 24).toFixed(0)} days`;
+    const own = usedBy.filter((id) => {
+      const h = HARBORS.find((x) => x.id === id);
+      return kind === "glos" ? h?.waveBuoy?.glos?.datasetId === Number(station.replace(/^glos:/, "")) : h?.buoyStation === station;
+    });
+    const windOwners = own.filter((id) => {
+      const h = HARBORS.find((x) => x.id === id);
+      return kind === "glos" ? h?.waveBuoy?.glos?.windId != null : true;
+    });
+    // In the off-season only a YEAR-ROUND neighbour can be counted on: every east-shore
+    // neighbour is itself a seasonal buoy and comes out within weeks of this one.
+    const lasting = (h: Harbor) => windNeighbors(h).filter((n) => !SEASONAL_NDBC.has(n));
+    const onModel = windOwners.filter((id) => {
+      const h = HARBORS.find((x) => x.id === id);
+      return !h || lasting(h).length === 0;
+    });
+    const borrowing = windOwners.filter((id) => !onModel.includes(id));
+    const borrowFrom = [...new Set(borrowing.flatMap((id) => lasting(HARBORS.find((x) => x.id === id)!)))];
+    findings.push(
+      `${displayName} has not reported for ${age} — expected in the off-season (seasonal platforms come out of the water mid-October and go back in April–June).` +
+        (borrowing.length
+          ? ` ${borrowing.length === 1 ? "Its harbor borrows" : `${borrowing.length} of its harbors borrow`} from ${borrowFrom.join(" / ")} meanwhile.`
+          : "") +
+        (onModel.length
+          ? ` ${onModel.join(", ")} now rate${onModel.length === 1 ? "s" : ""} on the forecast model, capped at Caution.`
+          : "") +
+        (!windOwners.length && own.length
+          ? ` Its waves fall back to the gridpoint model; water temperature comes from the next buoy in the chain, or goes blank (no cold-water read) until it is back.`
+          : ""),
+    );
+  } else if (!rows.length) {
     status = "unknown";
     findings.push("no data returned — the feed is unreachable or the station id is wrong");
   } else if (ageHours != null && ageHours > DARK_AGE_H) {
@@ -280,8 +350,8 @@ export function assessStation(
         `${displayName} has no rows for ${age}. Spotters are seasonal and get pulled for the winter, ` +
           `so this may be normal — but ${nHarbors} rely on it` +
           (usedFor.includes("windKt")
-            ? `, and it is their live WIND source: they now fall back to the gridpoint model, which measured 0.72× a same-site anemometer. That under-reads, which is the optimistic direction.`
-            : ` for waves/temperature, which fall back to the gridpoint model.`),
+            ? `, and it is their live WIND source: they now fall back to the gridpoint model, which measured 0.72× a same-site anemometer (the optimistic direction), so their ratings are capped at Caution.`
+            : ` for waves, which fall back to the gridpoint model, and water temperature, which comes from the next buoy in the chain or goes blank (no cold-water read).`),
       );
     } else {
       // Say what the outage actually does to the harbors whose OWN station this is. Since
@@ -295,9 +365,9 @@ export function assessStation(
       });
       const borrowing = own.length - onModel.length;
       const effects = [
-        borrowing ? `${borrowing} of its harbors borrow from a same-shore neighbour` : "",
+        borrowing ? `${borrowing} of its harbors ${borrowing === 1 ? "borrows" : "borrow"} from a same-shore neighbour` : "",
         onModel.length
-          ? `${onModel.join(", ")} ${onModel.length === 1 ? "has" : "have"} no neighbour in reach and now rate on the gridpoint model`
+          ? `${onModel.join(", ")} ${onModel.length === 1 ? "has" : "have"} no neighbour in reach and now rate on the forecast model, capped at Caution`
           : "",
       ].filter(Boolean);
       findings.push(
@@ -506,11 +576,13 @@ export interface HealthSummary {
   ok: boolean;
 }
 
-const SEVERITY: Record<HealthStatus, number> = { dark: 0, degraded: 1, unknown: 2, ok: 3 };
+const SEVERITY: Record<HealthStatus, number> = { dark: 0, degraded: 1, unknown: 2, offseason: 3, ok: 4 };
 
 export function summarize(stations: StationReport[], drift: DriftReport[], checkedAt = new Date()): HealthSummary {
+  // Off-season platforms are listed with the stations, but they are not problems: being
+  // out of the water in winter is the plan, and the ratings already account for it.
   const problems = stations
-    .filter((s) => s.status !== "ok")
+    .filter((s) => s.status !== "ok" && s.status !== "offseason")
     .sort((a, b) => SEVERITY[a.status] - SEVERITY[b.status] || a.station.localeCompare(b.station));
   const driftProblems = drift.filter((d) => d.status === "under" || d.status === "over");
   return {

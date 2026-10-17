@@ -7,7 +7,7 @@
 // so it can be unit-tested. See lib/rating.test.ts.
 
 import { Advisory, Conditions, Rating, Status, StormRisk } from "./types";
-import { Harbor, exposureForWind, crosswindKt, maxExposure } from "./harbors";
+import { Harbor, exposureForWind, crosswindKt, maxExposure, SEASONAL_NDBC } from "./harbors";
 import { BoatProfile, Skill, skillFactor } from "./boats";
 import { degToCompass } from "./units";
 import { worstAlertLevel, type AlertLevel } from "./alerts";
@@ -68,6 +68,41 @@ function alertCap(level: AlertLevel): number {
 function stormCap(level: StormRisk["level"] | undefined): number {
   return level === "active" ? 8 : level === "elevated" ? 45 : 100;
 }
+
+/**
+ * The live wind source this harbor has LOST, when it is now rating on the forecast model
+ * instead — null otherwise.
+ *
+ * Only for a harbor that normally has an observation of its own: its NDBC station or a
+ * validated Spotter. Seasonal buoys come out of the water from mid-October (2023-25:
+ * pulled Oct 17 - Nov 25, back Mar 24 - Jun 23) and Spotters likewise, so for months at a
+ * time those harbors fall to a model whose wind has read as low as 0.72x an anemometer
+ * (Green Bay) — the optimistic direction. Model-only harbors by design (Kewaunee, Cedar
+ * River, Sister Bay) are not "degraded", and a measured same-shore neighbour is not the
+ * model. History is rebuilt without `windBasis`, so past afternoons are never capped.
+ */
+export function forecastWindGap(harbor: Harbor, c: Conditions): string | null {
+  if (c.windBasis !== "model") return null;
+  if (harbor.buoyStation) return harbor.buoyStation;
+  const spotter = harbor.waveBuoy?.glos;
+  if (spotter?.windId != null) return spotter.label ?? "its Spotter";
+  return null;
+}
+
+/**
+ * What kind of source was lost, for the copy — a FACT about the platform, never a guess at
+ * the cause. Saying "seasonal buoys come out in the fall" about a fixed C-MAN station
+ * (Menominee, Fayette) or the Chicago crib would explain a fault away. Deterministic on
+ * purpose: rate() must not depend on today's date.
+ */
+export function lostSourceNote(harbor: Harbor): string | null {
+  if (!harbor.buoyStation) return harbor.waveBuoy?.glos?.windId != null ? "Spotters come out of the water for the winter" : null;
+  return SEASONAL_NDBC.has(harbor.buoyStation.toUpperCase()) ? "a seasonal buoy, out of the water from mid-October" : null;
+}
+
+/** "Caution" at best while a harbor that normally observes its wind is on the model: the
+ *  model can be fine, but nobody can tell from here, so it must not say "go". */
+const FORECAST_WIND_CAP = 59;
 
 interface Metric {
   key: string;
@@ -157,13 +192,21 @@ export function rate(
     open.push({ key: "alert", label: c.alerts?.[0]?.event.toLowerCase() ?? "weather warning", score: aCap });
   }
 
+  const lost = forecastWindGap(harbor, c);
+  if (lost) open.push({ key: "forecastWind", label: "forecast-model wind", score: FORECAST_WIND_CAP });
+
   const openScore = Math.min(...open.map((m) => m.score));
   const exitScore = Math.min(...exit.map((m) => m.score));
   const overall = Math.min(openScore, exitScore);
   const status = statusFromScore(overall);
 
   const limiter = [...open, ...exit].reduce((a, b) => (b.score < a.score ? b : a));
-  const reason = buildReason(harbor, c, status, limiter, skill, { windMetric, exitWaveFt, crossKt });
+  let reason = buildReason(harbor, c, status, limiter, skill, { windMetric, exitWaveFt, crossKt });
+  // When something else is worse than the cap, the reason names that — but the reader
+  // still needs to know the wind behind it is a forecast, not a measurement.
+  if (lost && limiter.key !== "forecastWind" && !c.alerts?.some((a) => a.level === "stop")) {
+    reason += ` (Wind is the forecast model: ${lost} isn't reporting.)`;
+  }
 
   return {
     status,
@@ -232,6 +275,10 @@ function buildReason(
       return stormLead;
     case "advisory":
       return `Small Craft Advisory in effect — the open lake is above ${SKILL_POSSESSIVE[skill]} comfort, even if it looks manageable at the dock.`;
+    case "forecastWind": {
+      const note = lostSourceNote(harbor);
+      return `${scPrefix}${forecastWindGap(harbor, c)} isn't reporting${note ? ` (${note})` : ""}, so this wind is the NWS forecast model, which can read low. Capped at Caution — check conditions yourself before you go.`;
+    }
     case "exitWave":
       return `${scPrefix}${dir} wind is stacking ~${(v.exitWaveFt ?? 0).toFixed(1)} ft right at ${harbor.name}'s entrance — the exit is the crux.`;
     case "crosswind":

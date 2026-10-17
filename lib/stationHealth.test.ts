@@ -4,6 +4,8 @@ import {
   assessDrift,
   stationUsage,
   summarize,
+  inOffSeason,
+  SEASONAL_NDBC,
   DARK_AGE_H,
   MIN_DRIFT_SPAN_H,
   SENSORLESS,
@@ -67,12 +69,15 @@ describe("assessStation", () => {
     const users = ["grand-haven", "muskegon", "whitehall"];
     const dark = assessStation("45161", rows(200, DARK_AGE_H + 400), WIND, users, NOW);
     expect(dark.findings[0]).toMatch(/grand-haven, muskegon, whitehall have no neighbour in reach/);
-    expect(dark.findings[0]).toMatch(/gridpoint model/);
+    expect(dark.findings[0]).toMatch(/forecast model, capped at Caution/);
     // Whereas 45198's harbors all have a same-shore neighbour to borrow from.
     const chicago = assessStation("45198", rows(200, DARK_AGE_H + 400), WIND, ["belmont", "montrose"], NOW);
     expect(chicago.findings[0]).toMatch(/2 of its harbors borrow from a same-shore neighbour/);
-    expect(chicago.findings[0]).not.toMatch(/gridpoint model/);
+    expect(chicago.findings[0]).not.toMatch(/forecast model/);
+    const one = assessStation("45198", rows(200, DARK_AGE_H + 400), WIND, ["belmont"], NOW);
+    expect(one.findings[0], "singular").toMatch(/1 of its harbors borrows from/);
   });
+
 
   it("catches a fresh feed with a DEAD column — the 45198 case", () => {
     // The failure that hid in plain sight: speed on every row, direction on none.
@@ -159,6 +164,90 @@ describe("assessStation", () => {
     const r = assessStation("SYWW3", [], WIND, ["a"], NOW);
     expect(r.status).toBe("unknown");
     expect(r.ageHours).toBeNull();
+  });
+});
+
+describe("the off-season (seasonal buoys come out of the water)", () => {
+  const OCT_20 = Date.UTC(2026, 9, 20, 12);
+  const MAR_10 = Date.UTC(2027, 2, 10, 12);
+  const SEP_04 = NOW; // in season
+  const darkAt = (now: number) => rows(200, 0, []).map((r) => ({ ...r, time: r.time - (NOW - now) - 72 * H }));
+
+  it("knows the window from the 2023-25 deployment record, wrapping the new year", () => {
+    expect(inOffSeason(OCT_20)).toBe(true);
+    expect(inOffSeason(Date.UTC(2026, 11, 31))).toBe(true);
+    expect(inOffSeason(MAR_10)).toBe(true);
+    expect(inOffSeason(Date.UTC(2027, 5, 30, 12))).toBe(true);
+    expect(inOffSeason(Date.UTC(2027, 6, 1, 12))).toBe(false);
+    expect(inOffSeason(SEP_04)).toBe(false);
+    expect(inOffSeason(Date.UTC(2026, 9, 14, 12)), "Oct 14: buoys still out there").toBe(false);
+  });
+
+  it("a seasonal buoy gone quiet in the off-season is expected — reported, never a failure", () => {
+    const r = assessStation("45161", darkAt(OCT_20), WIND, ["grand-haven", "muskegon", "whitehall"], OCT_20);
+    expect(r.status).toBe("offseason");
+    expect(r.findings[0]).toMatch(/expected in the off-season/);
+    expect(r.findings[0], "says what the harbors do meanwhile").toMatch(/forecast model, capped at Caution/);
+    const s = summarize([r], [], new Date(OCT_20));
+    expect(s.ok).toBe(true);
+    expect(s.problems).toHaveLength(0);
+    expect(s.stations[0].status, "still listed").toBe("offseason");
+  });
+
+  it("the SAME silence in season is still a failure (45170 stopped 2025-09-16)", () => {
+    const r = assessStation("45170", darkAt(SEP_04), WIND, ["new-buffalo"], SEP_04);
+    expect(r.status).toBe("dark");
+    expect(summarize([r], []).ok).toBe(false);
+  });
+
+  it("a FIXED station dark in winter is a fault in any month", () => {
+    // The Chicago crib does not come out of the water; if it goes quiet, something broke.
+    expect(SEASONAL_NDBC.has("CHII2")).toBe(false);
+    const r = assessStation("CHII2", darkAt(OCT_20), WIND, ["belmont"], OCT_20);
+    expect(r.status).toBe("dark");
+    expect(summarize([r], []).ok).toBe(false);
+  });
+
+  it("a seasonal buoy that is FRESH but has a dead sensor is still degraded in winter", () => {
+    // Off-season only excuses absence. A buoy still in the water with a dead vane is a fault.
+    const fresh = died(["windDir"]).map((r) => ({ ...r, time: r.time - (NOW - OCT_20) }));
+    const r = assessStation("45198", fresh, WIND, ["belmont"], OCT_20);
+    expect(r.status).toBe("degraded");
+  });
+
+  it("stays Off-season once the feed window has EMPTIED, not 'Unreachable'", () => {
+    // Two weeks after a Spotter is pulled its 14-day window returns nothing at all.
+    const r = assessStation("glos:695", [], ["windKt"], ["escanaba", "gladstone"], OCT_20, { kind: "glos", label: "Bay de Noc Spotter" });
+    expect(r.status).toBe("offseason");
+    expect(r.findings[0]).not.toMatch(/station id is wrong/);
+    expect(summarize([r], []).problems).toHaveLength(0);
+    // A FIXED station with an empty feed is still unreachable, in any month.
+    expect(assessStation("CHII2", [], WIND, ["belmont"], OCT_20).status).toBe("unknown");
+  });
+
+  it("in winter, only a YEAR-ROUND neighbour counts: the east shore ends on the model", () => {
+    // Every east-shore neighbour is itself a seasonal buoy, so "St Joseph borrows a
+    // neighbour" would be false by late November.
+    const east = assessStation("45026", darkAt(OCT_20), WIND, ["st-joseph", "new-buffalo", "south-haven"], OCT_20);
+    expect(east.findings[0]).toMatch(/st-joseph now rates on the forecast model, capped at Caution/);
+    expect(east.findings[0]).not.toMatch(/borrow/);
+    // The Chicago fleet keeps the crib, which stays in the water.
+    const chi = assessStation("45198", darkAt(OCT_20), WIND, ["belmont", "montrose"], OCT_20);
+    expect(chi.findings[0]).toMatch(/2 of its harbors borrow from CHII2 meanwhile/);
+    expect(chi.findings[0]).not.toMatch(/forecast model/);
+  });
+
+  it("never claims the model supplies water temperature", () => {
+    const r = assessStation("glos:609", darkAt(OCT_20), ["waveFt", "waterTempF"], ["kewaunee"], OCT_20, { kind: "glos" });
+    expect(r.findings[0]).toMatch(/water temperature comes from the next buoy in the chain, or goes blank/);
+  });
+
+  it("a wind Spotter pulled for the winter no longer fails the run, and says the harbors are capped", () => {
+    const r = assessStation("glos:695", darkAt(OCT_20), ["windKt", "waveFt"], ["escanaba", "gladstone"], OCT_20,
+      { kind: "glos", label: "Bay de Noc Spotter" });
+    expect(r.status).toBe("offseason");
+    expect(r.findings[0]).toMatch(/escanaba, gladstone now rate on the forecast model, capped at Caution/);
+    expect(summarize([r], []).ok).toBe(true);
   });
 });
 

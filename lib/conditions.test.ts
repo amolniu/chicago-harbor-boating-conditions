@@ -114,6 +114,18 @@ describe("fallback stays on the harbor's own shore, then its model", () => {
     expect(c.windKt).toBe(11);
   });
 
+  it("tags where the wind came from, so the rating can tell 'lost its buoy' from 'model by design'", () => {
+    const sp = getHarbor("southport")!;
+    const own = assemble(sp, new Map([["45187", st("45187", { windKt: 9, windDir: 30 })]]), GRID, "none", undefined);
+    expect(own.windBasis).toBe("station");
+    const borrowed = assemble(sp, new Map([["45187", null], ["45186", st("45186", { windKt: 11, windDir: 30 })]]), GRID, "none", undefined);
+    expect(borrowed.windBasis).toBe("neighbor");
+    const model = assemble(sp, new Map(), GRID, "none", undefined);
+    expect(model.windBasis).toBe("model");
+    const esc = getHarbor("escanaba")!;
+    expect(assemble(esc, new Map(), GRID, "none", undefined, SPOTTER).windBasis).toBe("spotter");
+  });
+
   it("ends at the model rather than going dark, for every harbor", () => {
     // Before 2026-10-03 only windFromGrid harbors could fall back to their model; the rest
     // showed no wind at all once their stations and the Chicago list were quiet.

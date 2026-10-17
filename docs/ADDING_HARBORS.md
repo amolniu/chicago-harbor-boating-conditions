@@ -282,6 +282,12 @@ metres for wave height and **Kelvin** for water temperature. Pick the shallowest
 `depth` for temperature. Spotters are **seasonal**: they go dark each winter, so the
 blend must (and does) fall back to the gridpoint model.
 
+**Seasonal NDBC buoys** (most offshore `45xxx` buoys come out of the water mid-October to
+spring) must be added to `SEASONAL_NDBC` in `lib/stationHealth.ts`, or the weekly health job
+will fail every week all winter. Fixed stations (C-MAN, cribs, CO-OPS gauges) must **not** be:
+a dark fixed station is a fault in any month. While a harbor's own buoy or Spotter is out, its
+rating tops out at Caution (`forecastWindGap`) — that needs no configuration.
+
 ## Known limitations to generalize when scaling further
 
 - **Wind-history graph** uses only the harbor's own buoy; a good fallback would be

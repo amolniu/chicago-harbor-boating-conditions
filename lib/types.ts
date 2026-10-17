@@ -26,6 +26,12 @@ export interface Conditions {
   advisory: Advisory;
   /** Where the wind/wave numbers came from (buoy id or "forecast"). */
   source: string;
+  /** What kind of source the wind SPEED came from: the harbor's own station, a
+   *  same-shore neighbour, a validated Spotter, or the NWS gridpoint model. Lets the
+   *  rating tell "this harbor is model-only by design" from "its buoy is out of the
+   *  water and it has fallen to the model" (see forecastWindGap in lib/rating.ts).
+   *  Optional: history summaries are rebuilt without it, and must not be capped. */
+  windBasis?: WindBasis;
   /** ISO timestamp of the underlying observation. */
   observedAt: string | null;
   /** Regional HRRR thunderstorm/convective outlook (same across nearby harbors). */
@@ -37,6 +43,8 @@ export interface Conditions {
 }
 
 export type Advisory = "none" | "small_craft" | "gale" | "storm";
+
+export type WindBasis = "station" | "neighbor" | "spotter" | "model";
 
 /** Compact HRRR storm signal carried on Conditions (see lib/storm.ts). */
 export interface StormRisk {

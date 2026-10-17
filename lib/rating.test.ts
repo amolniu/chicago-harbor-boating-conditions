@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rate } from "./rating";
+import { rate, forecastWindGap, lostSourceNote } from "./rating";
 import { getHarbor, HARBORS } from "./harbors";
 import { getBoat } from "./boats";
 import { classifyAlert } from "./alerts";
@@ -17,6 +17,77 @@ const belmont = getHarbor("belmont")!;
 const burnham = getHarbor("burnham")!;
 const monroe = getHarbor("monroe")!;
 const catalina = getBoat("catalina30");
+
+describe("a harbor that has lost its own wind source tops out at Caution", () => {
+  // A light, sheltered day that would be green on an observation.
+  const calm = { windDir: 250, windKt: 6, gustKt: 8, waveFt: 0.5 };
+  const kewaunee = getHarbor("kewaunee")!; // model-only by design
+  const escanaba = getHarbor("escanaba")!; // Bay de Noc Spotter
+  const daysailer = getBoat("daysailer");
+
+  it("its own buoy out of the water ⇒ the forecast model ⇒ capped at 59, and says why", () => {
+    const observed = rate(belmont, cond({ ...calm, windBasis: "station", source: "45198" }), daysailer, "intermediate");
+    expect(observed.status).toBe("green");
+    const r = rate(belmont, cond({ ...calm, windBasis: "model", source: "NWS model" }), daysailer, "intermediate");
+    expect(r.status).toBe("yellow");
+    expect(r.score).toBe(59);
+    expect(r.limiter).toBe("forecast-model wind");
+    expect(r.reason).toMatch(/45198 isn't reporting/);
+    expect(r.reason).toMatch(/forecast model/);
+    expect(forecastWindGap(belmont, cond({ windBasis: "model" }))).toBe("45198");
+  });
+
+  it("a Spotter harbor whose Spotter is pulled is capped the same way, naming the Spotter", () => {
+    const r = rate(escanaba, cond({ ...calm, windBasis: "model", source: "NWS model" }), daysailer, "intermediate");
+    expect(r.score).toBe(59);
+    expect(r.reason).toMatch(/Bay de Noc Spotter isn't reporting/);
+  });
+
+  it("a harbor that is model-only BY DESIGN is not capped — nothing was lost", () => {
+    const r = rate(kewaunee, cond({ ...calm, windBasis: "model", source: "NWS model" }), daysailer, "intermediate");
+    expect(forecastWindGap(kewaunee, cond({ windBasis: "model" }))).toBeNull();
+    expect(r.status).toBe("green");
+  });
+
+  it("a measured same-shore neighbour is not the model, and is not capped", () => {
+    const r = rate(belmont, cond({ ...calm, windBasis: "neighbor", source: "CHII2" }), daysailer, "intermediate");
+    expect(r.status).toBe("green");
+  });
+
+  it("history (no windBasis) is never capped, so past afternoons keep their real ratings", () => {
+    expect(rate(belmont, cond({ ...calm }), daysailer, "intermediate").status).toBe("green");
+  });
+
+  it("when something worse limits, the reason names it AND notes the wind is a forecast", () => {
+    const r = rate(belmont, cond({ windDir: 45, windKt: 20, gustKt: 26, waveFt: 4, windBasis: "model" }), daysailer, "intermediate");
+    expect(r.status).toBe("red");
+    expect(r.limiter).not.toBe("forecast-model wind");
+    expect(r.reason).toMatch(/forecast model: 45198 isn't reporting/);
+  });
+
+  it("never blames the season for a FIXED station going quiet", () => {
+    // Menominee's MNMM4 is a fixed CO-OPS station: if it is silent, something broke.
+    // "Seasonal buoys come out in the fall" would explain a fault away.
+    const menominee = getHarbor("menominee")!;
+    expect(lostSourceNote(menominee)).toBeNull();
+    const r = rate(menominee, cond({ ...calm, windBasis: "model", source: "NWS model" }), daysailer, "intermediate");
+    expect(r.score).toBe(59);
+    expect(r.reason).toMatch(/MNMM4 isn't reporting, so/);
+    expect(r.reason).not.toMatch(/seasonal|out of the water/);
+    // ...whereas a seasonal buoy and a Spotter say what they are.
+    expect(lostSourceNote(belmont)).toMatch(/seasonal buoy/);
+    expect(lostSourceNote(escanaba)).toMatch(/Spotters come out of the water/);
+  });
+
+  it("a stop-level warning still pins it to 0 and leads, with no footnote", () => {
+    const event = "Special Marine Warning";
+    const warn = { event, headline: "Waterspouts possible", level: classifyAlert(event), ends: null };
+    const r = rate(belmont, cond({ ...calm, windBasis: "model", alerts: [warn] }), daysailer, "intermediate");
+    expect(r.score).toBe(0);
+    expect(r.reason).toMatch(/^Special Marine Warning in effect/);
+    expect(r.reason).not.toMatch(/forecast model/);
+  });
+});
 
 describe("harbor-specific exit vs open (the core value prop)", () => {
   const neBlow = cond({ windDir: 45, windKt: 14, gustKt: 17, waveFt: 3.5 });

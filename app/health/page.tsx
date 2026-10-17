@@ -25,6 +25,7 @@ const META: Record<HealthStatus, { dot: string; label: string; text: string }> =
   degraded: { dot: "bg-warn", label: "Sensor down", text: "text-warn-fg" },
   dark: { dot: "bg-bad", label: "Station dark", text: "text-bad-fg" },
   unknown: { dot: "bg-idle", label: "Unreachable", text: "text-muted" },
+  offseason: { dot: "bg-idle", label: "Off-season", text: "text-muted" },
 };
 
 const COL_LABEL: Record<string, string> = {
@@ -38,6 +39,7 @@ const COL_LABEL: Record<string, string> = {
 export default async function HealthPage() {
   const s = await runHealthCheck();
   const checked = new Date(s.checkedAt);
+  const offSeason = s.stations.filter((x) => x.status === "offseason").length;
 
   return (
     <div>
@@ -63,7 +65,9 @@ export default async function HealthPage() {
           <Panel>
             <p className="text-good-fg">
               <span className="mr-2">✓</span>
-              All {s.stations.length} stations healthy — every column the app depends on is reporting.
+              {offSeason
+                ? `All ${s.stations.length - offSeason} in-season stations healthy; ${offSeason} out of the water for the off-season, as expected.`
+                : `All ${s.stations.length} stations healthy — every column the app depends on is reporting.`}
             </p>
           </Panel>
         ) : (
@@ -121,7 +125,7 @@ export default async function HealthPage() {
                     )}
                   </td>
                   <td className="py-2 pr-3">
-                    <span className="inline-flex items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1.5" title={st.findings[0]}>
                       <span className={`h-2 w-2 rounded-full ${META[st.status].dot}`} />
                       <span className={META[st.status].text}>{META[st.status].label}</span>
                     </span>
@@ -136,7 +140,9 @@ export default async function HealthPage() {
                         // the fallback chain covers it and it is not a fault.
                         const absent = st.absentSensors.includes(c);
                         const pct = Math.round(st.fill[c] * 100);
-                        const bad = !absent && pct < 50;
+                        // Out of the water for the season: 0% is expected, not red.
+                        const idle = st.status === "offseason";
+                        const bad = !absent && !idle && pct < 50;
                         return (
                           <span
                             key={c}
@@ -149,7 +155,7 @@ export default async function HealthPage() {
                                   : "bg-sunken text-muted"
                             }`}
                           >
-                            {COL_LABEL[c] ?? c} {absent ? "n/a" : `${pct}%`}
+                            {COL_LABEL[c] ?? c} {absent ? "n/a" : idle ? "—" : `${pct}%`}
                           </span>
                         );
                       })}

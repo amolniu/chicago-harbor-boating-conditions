@@ -6,7 +6,7 @@
 // wind-sea from wind speed + direction (fetch), which is a rough but monotonic
 // signal — clearly an estimate, good enough to rank hours against each other.
 
-import { ForecastHour, Status } from "./types";
+import { ForecastHour, Status, type WindBasis } from "./types";
 import { Harbor, lakeFetchFactor } from "./harbors";
 import { BoatProfile, Skill } from "./boats";
 import { rate } from "./rating";
@@ -54,6 +54,11 @@ export function computeWindow(
   sunrise: Date | null,
   sunset: Date | null,
   stormHours: string[] = [],
+  /** The harbor's LIVE wind basis. When it is "model" for a harbor that normally observes
+   *  its wind, rate() caps every forecast hour at Caution exactly as it caps the header —
+   *  otherwise the page said "Caution, check conditions yourself" above "Good to go now",
+   *  both from the same model. Model-only harbors are unaffected (forecastWindGap). */
+  liveWindBasis?: WindBasis,
 ): SailWindow {
   const stormy = new Set(stormHours);
   const next = forecast.slice(0, 24);
@@ -65,6 +70,7 @@ export function computeWindow(
         waveFt: h.waveFt, wavePeriodS: null, waveDir: h.windDir,
         waterTempF: null, airTempF: null, advisory: "none",
         source: "forecast", observedAt: h.time,
+        windBasis: liveWindBasis === "model" ? "model" : undefined,
       },
       boat,
       skill,

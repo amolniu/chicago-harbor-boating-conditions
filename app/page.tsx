@@ -6,7 +6,7 @@ import { usePrefs } from "@/components/prefs";
 import { HarborCard } from "@/components/HarborCard";
 import { STATUS_META, statusLabel, statusRank } from "@/components/status-meta";
 import { getHarbor, REGIONS, regionOf, type RegionId } from "@/lib/harbors";
-import { rate } from "@/lib/rating";
+import { rate, forecastWindGap, lostSourceNote } from "@/lib/rating";
 import { RECALL_URL } from "@/lib/recalls";
 import { Conditions } from "@/lib/types";
 
@@ -99,6 +99,13 @@ export default function Board() {
   }, [ranked, filter, favorites]);
 
   const best = filtered.filter((h) => h.rating.status === "green").slice(0, 3);
+  // Harbors whose own buoy/Spotter is out (usually for the winter) and that now rate on
+  // the forecast model, capped at Caution. Said once, up front, so a board full of
+  // yellow in November reads as "the buoys are out", not "the lake is rough everywhere".
+  const onForecast = filtered.filter((h) => forecastWindGap(getHarbor(h.id)!, h.conditions));
+  // Blame the season only when it is true of every harbor listed: a fixed station (the
+  // crib, Menominee, Fayette) going quiet is a fault, not the calendar.
+  const allSeasonal = onForecast.every((h) => lostSourceNote(getHarbor(h.id)!));
 
   return (
     <div>
@@ -171,6 +178,26 @@ export default function Board() {
             <p className="mt-1 text-sm text-fg">
               Nothing is fully green for a {boat.name} right now — {filtered[0].name} is the closest ({filtered[0].rating.score}).
             </p>
+          )}
+        </div>
+      )}
+
+      {onForecast.length > 0 && (
+        <div className="mb-6 rounded-xl border border-line bg-raised px-4 py-3 text-sm text-muted">
+          <span aria-hidden="true">ℹ </span>
+          {onForecast.length === 1 ? (
+            <>
+              <span className="text-fg">{onForecast[0].name}</span> has lost its own wind source
+              {allSeasonal ? " (seasonal buoys come out of the water for the winter)" : ""}, so it rates on the NWS
+              forecast model and tops out at Caution until that source is back.
+            </>
+          ) : (
+            <>
+              {onForecast.length === filtered.length ? "Every harbor here has" : `${onForecast.length} harbors have`} lost
+              their own wind source{allSeasonal ? " (seasonal buoys come out of the water for the winter)" : ""}, so they
+              rate on the NWS forecast model and top out at Caution until those sources are back:{" "}
+              <span className="text-fg">{onForecast.map((h) => h.name).join(", ")}</span>.
+            </>
           )}
         </div>
       )}
