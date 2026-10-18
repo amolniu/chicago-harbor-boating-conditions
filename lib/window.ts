@@ -6,12 +6,14 @@
 // wind-sea from wind speed + direction (fetch), which is a rough but monotonic
 // signal — clearly an estimate, good enough to rank hours against each other.
 
-import { ForecastHour, Status, type WindBasis } from "./types";
+import { ForecastHour, Status, type Conditions } from "./types";
 import { Harbor, lakeFetchFactor } from "./harbors";
 import { BoatProfile, Skill } from "./boats";
 import { rate } from "./rating";
+import { overlaps, worstAdvisory, sortAlerts } from "./alerts";
 
 const TZ = "America/Chicago";
+const HOUR_MS = 3600_000;
 
 /** Rough wind-sea estimate (ft) for Chicago's fetch. Capped; clearly approximate. */
 export function estimateWaveFt(windKt: number, windDir: number): number {
@@ -53,24 +55,44 @@ export function computeWindow(
   skill: Skill,
   sunrise: Date | null,
   sunset: Date | null,
-  stormHours: string[] = [],
-  /** The harbor's LIVE wind basis. When it is "model" for a harbor that normally observes
-   *  its wind, rate() caps every forecast hour at Caution exactly as it caps the header —
-   *  otherwise the page said "Caution, check conditions yourself" above "Good to go now",
-   *  both from the same model. Model-only harbors are unaffected (forecastWindGap). */
-  liveWindBasis?: WindBasis,
+  ctx: {
+    /** Top-of-hour ISO times HRRR flags as thunderstorm-likely: forced red. */
+    stormHours?: string[];
+    /** From the harbor's LIVE conditions, applied to every forecast hour the way the
+     *  header applies them, so the page can't say "Caution" above "Good to go now":
+     *  • windBasis "model" for a harbor that normally observes its wind caps each hour
+     *    at Caution (forecastWindGap); model-only harbors are unaffected.
+     *  • hazards: each advisory/warning caps exactly the hours its [onset, ends) covers —
+     *    a Small Craft Advisory "from 8 PM" caps from 8 PM, not before, and stops at its
+     *    end. Until 2026-10-18 the window rated every hour with advisory "none".
+     *  • warningsUnavailable: NWS warnings couldn't be checked, so no hour may say "go". */
+    live?: Pick<Conditions, "windBasis" | "hazards" | "warningsUnavailable">;
+  } = {},
 ): SailWindow {
-  const stormy = new Set(stormHours);
+  const stormy = new Set(ctx.stormHours ?? []);
+  const hazards = ctx.live?.hazards ?? [];
   const next = forecast.slice(0, 24);
   const scored: ScoredHour[] = next.map((h) => {
+    const from = Date.parse(h.time);
+    const during = hazards.filter((z) => overlaps(z, from, from + HOUR_MS));
     const r = rate(
       harbor,
       {
         windDir: h.windDir, windKt: h.windKt, gustKt: h.gustKt,
         waveFt: h.waveFt, wavePeriodS: null, waveDir: h.windDir,
-        waterTempF: null, airTempF: null, advisory: "none",
+        waterTempF: null, airTempF: null,
+        advisory: worstAdvisory(during),
+        // Sorted: rate() names the cap after the first, most constraining alert.
+        alerts: sortAlerts(
+          during
+            // Stop-level stays stop even when it also carries an advisory tier (Hurricane
+            // Force Wind Warning): it pins the hour to 0, not the storm cap of 5.
+            .filter((z) => (!z.advisory || z.level === "stop") && z.level !== "info")
+            .map((z) => ({ event: z.event, headline: null, level: z.level, onset: z.onset, ends: z.ends })),
+        ),
         source: "forecast", observedAt: h.time,
-        windBasis: liveWindBasis === "model" ? "model" : undefined,
+        windBasis: ctx.live?.windBasis === "model" ? "model" : undefined,
+        warningsUnavailable: ctx.live?.warningsUnavailable,
       },
       boat,
       skill,

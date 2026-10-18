@@ -106,6 +106,7 @@ export default function Board() {
   // Blame the season only when it is true of every harbor listed: a fixed station (the
   // crib, Menominee, Fayette) going quiet is a fault, not the calendar.
   const allSeasonal = onForecast.every((h) => lostSourceNote(getHarbor(h.id)!));
+  const unchecked = filtered.filter((h) => h.conditions.warningsUnavailable);
 
   return (
     <div>
@@ -179,6 +180,27 @@ export default function Board() {
               Nothing is fully green for a {boat.name} right now — {filtered[0].name} is the closest ({filtered[0].rating.score}).
             </p>
           )}
+        </div>
+      )}
+
+      {unchecked.length > 0 && (
+        <div className="mb-6 rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm text-warn-fg">
+          <span aria-hidden="true">⚠ </span>
+          {unchecked.length === filtered.length ? (
+            <>NWS warnings couldn&apos;t be checked just now, so ratings top out at Caution until they can be.</>
+          ) : (
+            // Only some failed (one harbor's point lookup): name them — the rest are fine.
+            <>
+              NWS warnings couldn&apos;t be checked just now for{" "}
+              <span className="font-semibold">{unchecked.map((h) => h.name).join(", ")}</span>, so{" "}
+              {unchecked.length === 1 ? "its rating tops" : "their ratings top"} out at Caution until they can be.
+            </>
+          )}{" "}
+          Check{" "}
+          <a className="underline" href="https://www.weather.gov/" target="_blank" rel="noreferrer">
+            weather.gov
+          </a>{" "}
+          for warnings before you go.
         </div>
       )}
 

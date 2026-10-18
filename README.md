@@ -29,8 +29,9 @@ engine, and returns one decision with the reason in plain English.
 
 ### Harbor detail (`/harbor/[id]`)
 
-- Status, score and reason, with a pill for each NWS alert, the marine advisory, and the HRRR
-  storm headline.
+- Status, score and reason, with a pill for each NWS alert, the marine advisory (and when it
+  ends), anything scheduled ("Coming up: Small Craft Advisory from 8 PM EDT"), and the HRRR
+  storm headline — plus a notice if NWS warnings couldn't be checked.
 - **Launch score** — harbor exit vs open lake, and which factor is limiting. Some days are fine
   offshore and ugly getting in and out.
 - **Recommended sail window** — the next 24 hours rated hour by hour for your boat, and the
@@ -103,18 +104,26 @@ yellow 30–59, red < 30**, and the lowest-scoring metric is named as the limite
 | Trigger | Score capped at |
 |---|---|
 | NWS Tornado, Severe Thunderstorm, Special Marine, Hurricane or Tropical Storm Warning; waterspouts | **0** — outranks every model, and leads the reason |
-| Storm Warning (or Hurricane Force Wind Warning) **in effect** for the harbor's marine zone | 5 |
+| Storm Warning (or Hurricane Force Wind Warning) **in effect** for the harbor's marine zone(s) | 5 |
 | HRRR thunderstorm **active** (stormy now or next hour) | 8 |
-| Gale Warning **in effect** for the marine zone | 10 |
-| Small Craft Advisory **in effect** for the marine zone | 24 / 48 / 58 by skill, plus up to 20 for a sheltered harbor |
+| Gale Warning **in effect** for the marine zone(s) | 10 |
+| Small Craft Advisory **in effect** for the marine zone(s) | 24 / 48 / 58 by skill, plus up to 20 for a sheltered harbor |
 | NWS Tornado or Severe Thunderstorm **Watch**; HRRR storm **elevated** (next 6 h) | 45 |
 | The harbor's **own** buoy or Spotter isn't reporting, so its wind is the forecast model (usually the off-season) | 59 — Caution at best |
+| **NWS warnings couldn't be checked** (the alerts feed failed, after a retry) | 59 — Caution at best |
 
-The three marine caps come only from the `...X IN EFFECT...` headlines of the zone's
-nearshore marine text (`lib/nws.ts`); when several are up, the most severe wins. Wording in the
-period forecasts — "a Small Craft Advisory may be needed" Saturday night, "gales possible" —
-caps nothing, and neither does a **Gale or Storm Watch**: a watch says the wind is possible
-within ~48 h, not blowing now, and the sail window already rates those hours.
+**Where warnings and advisories come from** (`lib/alerts.ts`, reworked 2026-10-18). Marine
+alerts — Small Craft Advisory, Gale/Storm Warning, Special Marine Warning — are issued per
+**marine zone**, so they are fetched once for all of Lake Michigan and matched to each harbor's
+zones (`marineZone` plus any boundary `alertZones`). Land warnings (tornado, severe
+thunderstorm) carry small polygons and are still looked up at each harbor's point. A Special
+Marine Warning anywhere in a harbor's zone counts for the whole zone — over-warning is the safe
+direction. Advisories use the alert's real start and end times (`onset`, `ends`): a scheduled
+"Small Craft Advisory from 8 PM" caps nothing before 8 PM and stops at its end; cancelled or
+upgraded alerts that linger in the feed are dropped. A **Gale or Storm Watch** caps nothing —
+it says the wind is possible within ~48 h, not blowing now. If the alerts feed fails, the
+nearshore text's `...X IN EFFECT...` headline stands in for the advisory, and the ratings top out
+at Caution until warnings can be checked again — "we couldn't ask" never reads as "all clear".
 
 **The off-season.** Seasonal buoys come out of the water from mid-October (2023–25: pulled
 Oct 17 – Nov 25, back Mar 24 – Jun 23), and Spotters likewise. A harbor that normally observes
@@ -132,8 +141,10 @@ exit waves use the harbor's worst exposure over every bearing and the crosswind 
 full wind speed. A dead wind vane makes ratings cautious, never optimistic.
 
 **Sail window** (`lib/window.ts`). The first 24 hours of the gridpoint forecast, each rated for
-your boat; hours HRRR flags as stormy are forced red. The summary picks the longest daylight run
-of green (at least 2 h), else yellow.
+your boat; hours HRRR flags as stormy are forced red. Each hour also gets the advisories and
+warnings whose start–end window covers it — an SCA from 8 PM caps from 8 PM, a warning's hours
+are a no-go — plus the live caps (lost own wind source, warnings unavailable). The summary picks
+the longest daylight run of green (at least 2 h), else yellow.
 
 **Harbor intelligence** (`lib/intel.ts`). Turns the same inputs into per-facet reads with
 Clear / Watch / Caution severity, written differently for sailors and paddlers.
@@ -154,8 +165,8 @@ only the radar and webcam images directly.
 |---|---|---|
 | **NDBC** realtime2 (`lib/ndbc.ts`) | Wind speed / direction / gust, waves, water and air temp | 5 min cache. A station with nothing in the last 3 h counts as dark. |
 | **NWS gridpoints** (`lib/nws.ts`) | Per-harbor model waves (height / period / direction), wind, 48 h hourly forecast | Each harbor's own cell, 30 min cache. The model half of the wave blend; wind only where no observation exists. |
-| **NWS nearshore marine text** (tgftp) | Small Craft Advisory / Gale / Storm Warning in effect; wave forecast line | One product per marine zone, 30 min cache. |
-| **NWS active alerts** (`lib/alerts.ts`) | Warnings and watches at each harbor's point | 5 min cache. Drives the 0 / 45 caps above. |
+| **NWS nearshore marine text** (tgftp) | Wave forecast line; the advisory only as a fallback when the alerts feed fails | One product per marine zone, 30 min cache. |
+| **NWS active alerts** (`lib/alerts.ts`) | Marine advisories and warnings by zone (one Lake Michigan request), land warnings at each harbor's point — with real start/end times | 1 min cache, one retry; a failure is explicit and caps at Caution. Drives the 0 / 5 / 10 / SCA / 45 caps above. |
 | **NWS Area Forecast Discussion** | Forecaster reasoning from the harbor's own office | 30 min cache. |
 | **HRRR** (3 km) via **Open-Meteo** (`lib/storm.ts`) | CAPE, precipitation, gusts → thunderstorm risk | Per ~50 km storm cell, 45 min cache. An hour is stormy on CAPE ≥ 500 J/kg with rain, or on ≥ 2.5 mm/h of rain alone (CAPE collapses once a squall is overhead). |
 | **GLOS Seagull** (`lib/glos.ts`) | Sofar Spotter waves and water temp; spectral wind where validated | Used where no NDBC wave buoy is close. Spotter "wind" is inferred from the wave spectrum and reads 1.1–1.9× an anemometer, so it is enabled per platform only after checking, and supplies speed only. Spotters are pulled each winter. |
@@ -380,14 +391,16 @@ of them are reporting right now.
 
 ## Known issues
 
-- **A scheduled marine advisory caps from the moment it is issued.** A headline such as "Small
-  Craft Advisory in effect from 7 PM Saturday" caps Saturday morning too, because the text
-  product gives no machine-readable start time (`lib/nws.ts`). The NWS alerts API
-  (`/alerts/active?zone=LMZ…`) carries onset and end times and would fix this.
+- **The `harbor_snapshots.advisory` history mixes four rules:** backfilled rows say "none";
+  rows from 2026-09-03 to 10-03 used the over-matching text parser; rows from 10-03 used the
+  in-effect text headline; rows from 2026-10-18 use the alerts API's real start and end times
+  (or the text headline again while that feed is down).
+  Percentiles re-rate with that column, so old afternoons are not quite like-for-like.
 - **Exposure values are seed data** — geometry and general knowledge, to be refined with local
   sailors' input.
 - **Times are shown in Central time** on the detail page, even for the Michigan harbors that keep
-  Eastern time. Only the storm banner uses the harbor's own zone, so the two can disagree.
+  Eastern time. The storm banner and the advisory/"Coming up" pills use the harbor's own zone
+  (the pills say which, e.g. "EDT"), so they can sit an hour off the hour strip below them.
 - The Area Forecast Discussion link is labelled "LOT" for every harbor, though it loads the
   harbor's own office. A caption still calls forecast waves "wind-sea estimates", though they come
   from the NWS gridpoint.
