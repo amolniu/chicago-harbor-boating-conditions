@@ -47,8 +47,16 @@ export interface Harbor {
    *  Seagull platform, for harbors whose nearest NDBC buoy reports no waves at all).
    *  A GLOS platform can also supply water temperature. */
   waveBuoy?: { km: number; station?: string; glos?: GlosWaveRef };
-  /** NWS nearshore marine zone for forecasts + advisories. */
+  /** NWS nearshore marine zone for forecasts + advisories: the zone of the WATER the
+   *  harbor opens onto — not of the marina point, which usually sits on land in no marine
+   *  zone at all. Verify with api.weather.gov/zones?type=marine&point= at points 0.5–3 km
+   *  out along the entrance and fetch axis (docs/ADDING_HARBORS.md step 1). Seven harbors
+   *  were in the wrong zone until 2026-10-18. */
   marineZone: string;
+  /** Extra marine zones whose ALERTS also apply — for boundary harbors, where the zone
+   *  line meets the shore at or next to the harbor and departures can be in either zone.
+   *  The forecast text still comes from `marineZone`. See harborZones(). */
+  alertZones?: string[];
   /** NWS gridpoint (e.g. "LOT/76,76") for the harbor's offshore point — carries
    *  per-harbor wave height/period/direction + marine wind. */
   waveGrid: string;
@@ -245,7 +253,7 @@ export const HARBORS: Harbor[] = [
     // 1.01x. CHII2 stays a same-shore neighbour (NEIGHBOR_STATIONS) as a backup.
     buoyStation: "45198",
     waveBuoy: { station: "45198", km: 10 },
-    marineZone: "LMZ742",
+    marineZone: "LMZ741",
     notes: {
       entrance: "Wide SE-facing mouth behind the curving breakwater; open to south/southeast swell.",
       docking: "Roomy fairways, but a south wind sets you onto the outer slips.",
@@ -266,7 +274,7 @@ export const HARBORS: Harbor[] = [
     // 1.01x. CHII2 stays a same-shore neighbour (NEIGHBOR_STATIONS) as a backup.
     buoyStation: "45198",
     waveBuoy: { station: "45198", km: 8 },
-    marineZone: "LMZ742",
+    marineZone: "LMZ741",
     notes: {
       entrance: "The breakwall gap opens to the northeast. Strong NE winds stack steep waves right at the mouth, making the exit the hardest part of the day.",
       docking: "Once inside it's calm, but the approach to the gap is exposed on a NE blow.",
@@ -287,7 +295,7 @@ export const HARBORS: Harbor[] = [
     // 1.01x. CHII2 stays a same-shore neighbour (NEIGHBOR_STATIONS) as a backup.
     buoyStation: "45198",
     waveBuoy: { station: "45198", km: 8 },
-    marineZone: "LMZ742",
+    marineZone: "LMZ741",
     notes: {
       entrance: "Reached through a narrow channel off the lagoon — one of the most protected harbors in the system.",
       docking: "Tight, no-wake channel; easy docking once you're through.",
@@ -304,7 +312,7 @@ export const HARBORS: Harbor[] = [
     shelteredDirs: ["W", "WSW", "SW", "WNW", "NW"],
     buoyStation: "45198",
     waveBuoy: { station: "45198", km: 4 },
-    marineZone: "LMZ742",
+    marineZone: "LMZ741",
     notes: {
       entrance: "Tucked behind the main Chicago Harbor breakwater at the foot of Randolph — well sheltered.",
       docking: "Downtown crosswinds funnel between buildings; watch a north wind on the long faces.",
@@ -321,7 +329,7 @@ export const HARBORS: Harbor[] = [
     exposedDirs: ["NE", "ENE", "E"],
     buoyStation: "45198",
     waveBuoy: { station: "45198", km: 4 },
-    marineZone: "LMZ742",
+    marineZone: "LMZ741",
     notes: {
       entrance: "A large open mooring field behind the outer breakwater; more exposed than the slip harbors.",
       docking: "Star-dock moorings with a tender; an easterly crosswind at the gap makes picking up the can tricky.",
@@ -339,6 +347,8 @@ export const HARBORS: Harbor[] = [
     buoyStation: "45198",
     waveBuoy: { station: "45198", km: 5 },
     marineZone: "LMZ742",
+    // Boundary harbor: zone boundary 0.3 km NE of the harbor; departures go south into 742.
+    alertZones: ["LMZ741"],
     notes: {
       entrance: "Sheltered between Northerly Island and the Museum Campus peninsula; stays workable when the lake is up.",
       docking: "Largest harbor in the system with wide fairways — forgiving for bigger boats.",
@@ -514,6 +524,8 @@ export const HARBORS: Harbor[] = [
     buoyStation: "45187",
     waveBuoy: { station: "45187", km: 2 },
     marineZone: "LMZ646",
+    // Boundary harbor: the 646/740 boundary runs due east ~1 km south of the harbor.
+    alertZones: ["LMZ740"],
     discussionOffice: "MKX",
     radarStation: "KMKX",
     webcamUrl: "",
@@ -583,7 +595,9 @@ export const HARBORS: Harbor[] = [
     buoyStation: "45026",
     // Same station as the wind source; its wave sensor was going unused.
     waveBuoy: { station: "45026", km: 19 },
-    marineZone: "LMZ043",
+    marineZone: "LMZ844",
+    // Boundary harbor: the 043/844 boundary leaves the south pier root on this harbor's 290 deg fetch axis.
+    alertZones: ["LMZ043"],
     discussionOffice: "IWX",
     radarStation: "KGRR",
     webcamUrl: "",
@@ -613,6 +627,8 @@ export const HARBORS: Harbor[] = [
     // MCYI3 reports no waves; 45170 (Michigan City Buoy) does, 19 km offshore.
     waveBuoy: { station: "45170", km: 19 },
     marineZone: "LMZ046",
+    // Boundary harbor: the harbor mouth IS the 046/043 boundary vertex; the boundary runs between the entrance (300) and the fetch axis (330).
+    alertZones: ["LMZ043"],
     discussionOffice: "IWX",
     radarStation: "KGRR",
     webcamUrl: "https://www.glerl.noaa.gov/metdata/mcy/mcy01.jpg",
@@ -635,6 +651,8 @@ export const HARBORS: Harbor[] = [
     buoyStation: "45168",
     waveBuoy: { station: "45168", km: 4 },
     marineZone: "LMZ844",
+    // Boundary harbor: the 844/845 boundary leaves shore ~0.8 km north of the pier mouth.
+    alertZones: ["LMZ845"],
     discussionOffice: "GRR",
     radarStation: "KGRR",
     webcamUrl: "",
@@ -662,6 +680,8 @@ export const HARBORS: Harbor[] = [
     // Spotters are seasonal — when it's pulled for winter this falls back to the model.
     waveBuoy: { km: 8, glos: { datasetId: 671, waveId: 9494, periodId: 9501, dirId: 9495, tempId: 9491 } },
     marineZone: "LMZ847",
+    // Boundary harbor: the river mouth is the 846/847 boundary; the south pierhead sits in 846.
+    alertZones: ["LMZ846"],
     discussionOffice: "GRR",
     radarStation: "KGRR",
     webcamUrl: "",
@@ -710,7 +730,9 @@ export const HARBORS: Harbor[] = [
     // As at Grand Haven: 45161 carries no waves (temp yes, ~98%), so the Whitehall
     // Spotter leads for both.
     waveBuoy: { km: 12, glos: { datasetId: 672, waveId: 9520, periodId: 9527, dirId: 9521, tempId: 9517 } },
-    marineZone: "LMZ848",
+    marineZone: "LMZ847",
+    // Boundary harbor: the 847/848 boundary runs due west from shore just south of the White Lake latitude.
+    alertZones: ["LMZ848"],
     discussionOffice: "GRR",
     radarStation: "KGRR",
     webcamUrl: "",
@@ -758,6 +780,8 @@ export const HARBORS: Harbor[] = [
     exposedDirs: ["NE", "E", "ESE"],
     windFromGrid: true,
     marineZone: "LMZ221",
+    // Boundary harbor: the 221/521 boundary runs due east ~0.2 km south of the harbor; also a different NWS office (GRB vs MQT).
+    alertZones: ["LMZ521"],
     discussionOffice: "MQT",
     radarStation: "KGRB",
     webcamUrl: "",
@@ -902,6 +926,12 @@ const REGION_MEMBERS: Record<RegionId, string[]> = {
 const REGION_OF: Record<string, RegionId> = Object.fromEntries(
   (Object.entries(REGION_MEMBERS) as [RegionId, string[]][]).flatMap(([r, ids]) => ids.map((id) => [id, r] as const)),
 );
+
+/** Every marine zone whose alerts apply to this harbor: its own zone first, then any
+ *  boundary zones (`alertZones`). */
+export function harborZones(h: Harbor): string[] {
+  return [h.marineZone, ...(h.alertZones ?? []).filter((z) => z !== h.marineZone)];
+}
 
 /** The region a harbor belongs to (undefined if it hasn't been assigned one). */
 export function regionOf(id: string): RegionId | undefined {
