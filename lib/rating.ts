@@ -104,6 +104,9 @@ export function lostSourceNote(harbor: Harbor): string | null {
  *  model can be fine, but nobody can tell from here, so it must not say "go". */
 const FORECAST_WIND_CAP = 59;
 
+/** "Caution" at best while NWS warnings can't be checked — same reasoning. */
+const WARNINGS_UNKNOWN_CAP = 59;
+
 interface Metric {
   key: string;
   label: string;
@@ -195,6 +198,10 @@ export function rate(
   const lost = forecastWindGap(harbor, c);
   if (lost) open.push({ key: "forecastWind", label: "forecast-model wind", score: FORECAST_WIND_CAP });
 
+  // The NWS warnings feed could not be checked. "We couldn't ask" must never read as "all
+  // clear" (decided 2026-10-18), so — like a lost buoy — the rating may not say "go".
+  if (c.warningsUnavailable) open.push({ key: "warningsUnknown", label: "NWS warnings unavailable", score: WARNINGS_UNKNOWN_CAP });
+
   const openScore = Math.min(...open.map((m) => m.score));
   const exitScore = Math.min(...exit.map((m) => m.score));
   const overall = Math.min(openScore, exitScore);
@@ -206,6 +213,17 @@ export function rate(
   // still needs to know the wind behind it is a forecast, not a measurement.
   if (lost && limiter.key !== "forecastWind" && !c.alerts?.some((a) => a.level === "stop")) {
     reason += ` (Wind is the forecast model: ${lost} isn't reporting.)`;
+  }
+  // Not under a stop-level warning or a gale/storm: "before you go" would contradict
+  // "do not go out" / "stay in", and those already say all that matters.
+  if (
+    c.warningsUnavailable &&
+    limiter.key !== "warningsUnknown" &&
+    !c.alerts?.some((a) => a.level === "stop") &&
+    c.advisory !== "gale" &&
+    c.advisory !== "storm"
+  ) {
+    reason += " (NWS warnings couldn't be checked just now — look at weather.gov before you go.)";
   }
 
   return {
@@ -275,6 +293,14 @@ function buildReason(
       return stormLead;
     case "advisory":
       return `Small Craft Advisory in effect — the open lake is above ${SKILL_POSSESSIVE[skill]} comfort, even if it looks manageable at the dock.`;
+    // A WATCH-level alert (a stop-level one returned above). Without this case a Tornado
+    // Watch cap fell through to the wind copy — "E wind pushing 5 kt" under a tornado watch.
+    case "alert": {
+      const watch = c.alerts?.find((a) => a.level === "watch");
+      return `${scPrefix}${watch?.event ?? "A severe-weather watch"} in effect — conditions favour severe weather today. Stay close to the harbor, or stay in.`;
+    }
+    case "warningsUnknown":
+      return `${scPrefix}NWS warnings couldn't be checked just now, so this tops out at Caution — look at weather.gov for warnings before you go.`;
     case "forecastWind": {
       const note = lostSourceNote(harbor);
       return `${scPrefix}${forecastWindGap(harbor, c)} isn't reporting${note ? ` (${note})` : ""}, so this wind is the NWS forecast model, which can read low. Capped at Caution — check conditions yourself before you go.`;

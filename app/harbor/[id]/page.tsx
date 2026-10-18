@@ -11,6 +11,7 @@ import { HourStrip } from "@/components/HourStrip";
 import { STATUS_META, statusLabel } from "@/components/status-meta";
 import { getHarbor, windNeighbors } from "@/lib/harbors";
 import { rate, forecastWindGap, lostSourceNote } from "@/lib/rating";
+import { activeAt } from "@/lib/alerts";
 import { computeWindow } from "@/lib/window";
 import { greenStreak, roughnessPercentile, rateDay, dateMinus, type DaySummary } from "@/lib/history";
 import { harborIntel } from "@/lib/intel";
@@ -52,18 +53,35 @@ export default function HarborDetail() {
   const { skill, boat } = usePrefs();
   const [b, setB] = useState<Bundle | null>(null);
   const [error, setError] = useState(false);
+  // Compared against hazard start/end times ("in effect", "coming up"); refreshed with
+  // the data, so a page left open doesn't freeze before a scheduled advisory starts.
+  const [now, setNow] = useState(() => Date.now());
   const harbor = getHarbor(id);
 
   const [hist, setHist] = useState<{ enabled: boolean; days: DaySummary[]; today: string | null } | null>(null);
 
   useEffect(() => {
     let live = true;
+    let loaded = false;
+    const load = () =>
+      fetch(`/api/harbor/${id}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : Promise.reject()))
+        .then((d) => {
+          if (!live) return;
+          loaded = true;
+          setB(d);
+          setNow(Date.now());
+        })
+        // Only a failed FIRST load replaces the page; a failed refresh keeps the last data.
+        .catch(() => live && !loaded && setError(true));
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(false);
-    fetch(`/api/harbor/${id}`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((d) => live && setB(d))
-      .catch(() => live && setError(true));
+    load();
+    // Like the board: every 5 min, and when a backgrounded tab comes back — mobile
+    // browsers restore old tabs without reloading them.
+    const timer = setInterval(load, 5 * 60 * 1000);
+    const onVisible = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onVisible);
     // History loads separately and never blocks the live picture; a failure just
     // means the panel stays hidden.
     fetch(`/api/harbor/${id}/history`)
@@ -72,6 +90,8 @@ export default function HarborDetail() {
       .catch(() => {});
     return () => {
       live = false;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [id]);
 
@@ -79,7 +99,10 @@ export default function HarborDetail() {
   const sail = useMemo(
     () =>
       b && harbor
-        ? computeWindow(harbor, b.forecast, boat, skill, new Date(b.sun.sunrise), new Date(b.sun.sunset), b.stormHours, b.conditions.windBasis)
+        ? computeWindow(harbor, b.forecast, boat, skill, new Date(b.sun.sunrise), new Date(b.sun.sunset), {
+            stormHours: b.stormHours,
+            live: b.conditions,
+          })
         : null,
     [b, harbor, boat, skill],
   );
@@ -111,6 +134,22 @@ export default function HarborDetail() {
 
   const c = b.conditions;
   const meta = STATUS_META[rating.status];
+  // Hazard times in the HARBOR's own zone (Michigan's east shore keeps Eastern time).
+  const tz = harbor.timezone ?? "America/Chicago";
+  // Labelled with the zone ("EDT"): the hour strip below is still in Central.
+  const when = (iso: string) =>
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short" })
+      .format(new Date(iso))
+      .replace(":00", "");
+  const hz = c.hazards ?? [];
+  // The LATEST end among the active hazards of this tier: a boundary harbor can be under
+  // two (different offices or segments) that end hours apart. Open-ended ⇒ no "until".
+  const activeAdv = hz.filter((z) => z.advisory === c.advisory && activeAt(z, now));
+  const advisoryEnds =
+    activeAdv.length && activeAdv.every((z) => z.ends)
+      ? activeAdv.map((z) => z.ends!).reduce((a, e) => (Date.parse(e) > Date.parse(a) ? e : a))
+      : null;
+  const upcoming = hz.filter((z) => z.onset && Date.parse(z.onset) > now && Date.parse(z.onset) < now + 36 * 3600_000);
   // Cache-bust live images off the observation time (pure — changes when data refetches).
   const bust = encodeURIComponent(c.observedAt ?? b.id);
 
@@ -147,7 +186,7 @@ export default function HarborDetail() {
           {/* NWS warnings lead: they outrank the marine advisory and the model outlook. */}
           {(c.alerts ?? []).map((a) => (
             <div
-              key={a.event + (a.ends ?? "")}
+              key={a.id ?? `${a.event}|${a.onset ?? ""}|${a.ends ?? ""}`}
               className={`inline-flex items-start gap-2 rounded-lg border px-3 py-1.5 text-sm ${
                 a.level === "stop"
                   ? "border-bad bg-bad/15 font-semibold text-bad-fg"
@@ -163,6 +202,23 @@ export default function HarborDetail() {
               </span>
             </div>
           ))}
+          {/* Couldn't check NWS warnings: right after any warning we DO know of — it is why
+              the rating is capped, but a known warning outranks it. */}
+          {c.warningsUnavailable && (
+            <div className="inline-flex items-start gap-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-1.5 text-sm text-warn-fg">
+              <span aria-hidden="true">⚠</span>
+              <span>
+                {c.alerts?.some((a) => a.level === "stop")
+                  ? "Other NWS warnings couldn't be checked just now."
+                  : "NWS warnings couldn't be checked just now, so this harbor tops out at Caution."}{" "}
+                Check{" "}
+                <a className="underline" href="https://www.weather.gov/" target="_blank" rel="noreferrer">
+                  weather.gov
+                </a>
+                .
+              </span>
+            </div>
+          )}
           {forecastWindGap(harbor, c) && (
             <div className="inline-flex items-start gap-2 rounded-lg border border-line bg-raised px-3 py-1.5 text-sm text-muted">
               <span aria-hidden="true">ℹ</span>
@@ -175,9 +231,28 @@ export default function HarborDetail() {
           )}
           {c.advisory !== "none" && (
             <div className="inline-flex items-center gap-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-1.5 text-sm text-warn-fg">
-              ⚠ {ADVISORY_LABEL[c.advisory]} in effect{b.marine.headline ? ` — ${b.marine.headline}` : ""}
+              ⚠ {ADVISORY_LABEL[c.advisory]} in effect
+              {advisoryEnds
+                ? ` until ${when(advisoryEnds)}`
+                : b.marine.headline
+                  ? ` — ${b.marine.headline}`
+                  : ""}
             </div>
           )}
+          {/* Scheduled hazards: NWS issues them hours ahead, with a real start time. They
+              cap only the hours they cover (see the sail window), so say when. */}
+          {upcoming.map((z) => (
+            <div
+              key={`${z.event}|${z.onset}|${z.ends}`}
+              className="inline-flex items-center gap-2 rounded-lg border border-line bg-raised px-3 py-1.5 text-sm text-muted"
+            >
+              <span aria-hidden="true">🕒</span>
+              <span>
+                Coming up: {z.event} from {when(z.onset!)}
+                {z.ends ? ` until ${when(z.ends)}` : ""}
+              </span>
+            </div>
+          ))}
           {c.storm && c.storm.level !== "none" && (
             <div
               className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm ${

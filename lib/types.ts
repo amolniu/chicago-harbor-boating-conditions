@@ -1,6 +1,6 @@
 // Shared domain types used across the data layer, rules engine, and UI.
 
-import type { WeatherAlert } from "./alerts";
+import type { WeatherAlert, HazardPeriod } from "./alerts";
 
 export type Status = "green" | "yellow" | "red" | "unknown";
 
@@ -40,6 +40,12 @@ export interface Conditions {
    *  Separate from `advisory` (marine zone products) and `storm` (HRRR model): only
    *  this carries things like a Tornado Warning. */
   alerts?: WeatherAlert[];
+  /** Every advisory/warning affecting the harbor, current OR scheduled, with its start
+   *  and end — so the sail window can cap exactly the hours each one covers. */
+  hazards?: HazardPeriod[];
+  /** True when NWS warnings could not be checked (the feed failed): ratings top out at
+   *  Caution, because "we couldn't ask" must never read as "all clear". */
+  warningsUnavailable?: boolean;
 }
 
 export type Advisory = "none" | "small_craft" | "gale" | "storm";

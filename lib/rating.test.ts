@@ -79,6 +79,34 @@ describe("a harbor that has lost its own wind source tops out at Caution", () =>
     expect(lostSourceNote(escanaba)).toMatch(/Spotters come out of the water/);
   });
 
+  it("NWS warnings that couldn't be checked cap at Caution and say so (decided 2026-10-18)", () => {
+    const r = rate(belmont, cond({ ...calm, warningsUnavailable: true }), daysailer, "intermediate");
+    expect(r.score).toBe(59);
+    expect(r.limiter).toBe("NWS warnings unavailable");
+    expect(r.reason).toMatch(/couldn't be checked/);
+    // ...and when something else is worse, the reason still says the warnings are unknown.
+    const rough = rate(belmont, cond({ windDir: 45, windKt: 20, gustKt: 26, waveFt: 4, warningsUnavailable: true }), daysailer, "intermediate");
+    expect(rough.status).toBe("red");
+    expect(rough.reason).toMatch(/NWS warnings couldn't be checked/);
+  });
+
+  it("doesn't tell you to check 'before you go' under a warning that says don't go", () => {
+    const event = "Tornado Warning";
+    const r = rate(belmont, cond({ ...calm, warningsUnavailable: true, alerts: [{ event, headline: null, level: classifyAlert(event), ends: null }] }), daysailer, "intermediate");
+    expect(r.score).toBe(0);
+    expect(r.reason).not.toMatch(/before you go/);
+    const gale = rate(belmont, cond({ ...calm, warningsUnavailable: true, advisory: "gale" }), daysailer, "intermediate");
+    expect(gale.reason).not.toMatch(/before you go/);
+  });
+
+  it("a WATCH-level cap names the watch instead of printing wind copy", () => {
+    const event = "Tornado Watch";
+    const r = rate(belmont, cond({ ...calm, alerts: [{ event, headline: null, level: classifyAlert(event), ends: null }] }), daysailer, "intermediate");
+    expect(r.score).toBe(45);
+    expect(r.reason).toMatch(/^Tornado Watch in effect/);
+    expect(r.reason).not.toMatch(/wind pushing/);
+  });
+
   it("a stop-level warning still pins it to 0 and leads, with no footnote", () => {
     const event = "Special Marine Warning";
     const warn = { event, headline: "Waterspouts possible", level: classifyAlert(event), ends: null };
