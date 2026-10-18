@@ -8,6 +8,7 @@ import {
   windNeighbors,
   NEIGHBOR_STATIONS,
   MAX_NEIGHBOR_KM,
+  harborZones,
 } from "./harbors";
 
 const belmont = getHarbor("belmont")!; // Chicago west shore (openWaterBearing unset)
@@ -90,6 +91,46 @@ describe("same-shore wind neighbours (never across the lake)", () => {
 
   it("windFromGrid harbors borrow nothing: their fallback is their own model", () => {
     for (const h of HARBORS.filter((x) => x.windFromGrid)) expect(windNeighbors(h), h.id).toEqual([]);
+  });
+});
+
+describe("marine zones (the water the harbor opens onto)", () => {
+  it("every zone id is a well-formed Lake Michigan nearshore zone, listed once", () => {
+    // A well-formed but WRONG zone id returns "no alerts" from NWS rather than an error,
+    // so a typo here would read as all-clear. Shape is the most a unit test can check;
+    // the zone polygons themselves were verified against api.weather.gov on 2026-10-17.
+    for (const h of HARBORS) {
+      const zones = harborZones(h);
+      expect(zones[0], h.id).toBe(h.marineZone);
+      for (const z of zones) expect(z, h.id).toMatch(/^LMZ\d{3}$/);
+      expect(new Set(zones).size, `${h.id} lists a zone twice`).toBe(zones.length);
+    }
+  });
+
+  it("pins the seven corrections of 2026-10-18", () => {
+    // The north-side Chicago harbors open onto LMZ741 (Wilmette Harbor to Northerly
+    // Island); LMZ742 starts south of Northerly Island. St Joseph sits in LMZ844 (the
+    // old LMZ043 came from a lookup point nudged 3 km west), and Whitehall's channel
+    // exits into LMZ847.
+    for (const id of ["montrose", "belmont", "diversey", "dusable", "monroe"]) {
+      expect(getHarbor(id)!.marineZone, id).toBe("LMZ741");
+    }
+    expect(getHarbor("st-joseph")!.marineZone).toBe("LMZ844");
+    expect(getHarbor("whitehall")!.marineZone).toBe("LMZ847");
+  });
+
+  it("boundary harbors watch both zones", () => {
+    const both: Record<string, string[]> = {
+      burnham: ["LMZ742", "LMZ741"],
+      "north-point": ["LMZ646", "LMZ740"],
+      "st-joseph": ["LMZ844", "LMZ043"],
+      "new-buffalo": ["LMZ046", "LMZ043"],
+      "south-haven": ["LMZ844", "LMZ845"],
+      "grand-haven": ["LMZ847", "LMZ846"],
+      whitehall: ["LMZ847", "LMZ848"],
+      "cedar-river": ["LMZ221", "LMZ521"],
+    };
+    for (const [id, zones] of Object.entries(both)) expect(harborZones(getHarbor(id)!), id).toEqual(zones);
   });
 });
 

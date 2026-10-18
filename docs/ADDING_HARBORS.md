@@ -49,7 +49,26 @@ PY
 ```
 
 `waveHeight entries > 0` confirms the cell has wave model output. Use `grid` as
-`waveGrid`, the zone as `marineZone`, and `office` as `discussionOffice`.
+`waveGrid` and `office` as `discussionOffice`.
+
+⚠️ **Do NOT take `marineZone` from that nudged point.** A point "a little offshore" can
+land in the NEIGHBOURING zone: the example above (St Joseph, nudged 3 km west) returns
+LMZ043, but St Joseph's water is LMZ844 — and on 2026-10-17 LMZ844 had a Small Craft
+Advisory starting that evening while LMZ043 had none. Seven harbors were in the wrong zone
+until 2026-10-18 this way. Instead, look the zone up along the way out of the harbor:
+
+```bash
+for d in 0.5 1 2 3; do   # km out along the entrance / openWaterBearing, then compute lat/lon
+  curl -s -A "$UA" -H "Accept: application/geo+json" \
+    "https://api.weather.gov/zones?type=marine&point=$LAT,$LON" | jq -r '.features[].properties | "\(.id) \(.name)"'
+done
+```
+
+Use the zone the departure track sits in as `marineZone` (nearshore `LMZ0xx/2xx/5xx/6xx/7xx/8xx`,
+not the open-lake zones further out). If the track crosses a zone boundary within ~1 km of
+the harbor, add the other zone to `alertZones` so its warnings and advisories apply too.
+Confirm the nearshore text exists at
+`https://tgftp.nws.noaa.gov/data/forecasts/marine/near_shore/lm/<zone lowercase>.txt`.
 
 ## Step 2 — find the nearest buoy (live wind)
 
