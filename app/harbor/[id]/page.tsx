@@ -13,7 +13,7 @@ import { getHarbor, windNeighbors } from "@/lib/harbors";
 import { rate, forecastWindGap, lostSourceNote } from "@/lib/rating";
 import { activeAt } from "@/lib/alerts";
 import { computeWindow } from "@/lib/window";
-import { greenStreak, roughnessPercentile, rateDay, dateMinus, type DaySummary } from "@/lib/history";
+import { greenStreak, roughnessPercentile, rateDay, dateMinus, DEFAULT_TZ_FALLBACK, type DaySummary } from "@/lib/history";
 import { harborIntel } from "@/lib/intel";
 import { degToCompass } from "@/lib/units";
 import { fmtLocalTime } from "@/lib/astro";
@@ -134,8 +134,9 @@ export default function HarborDetail() {
 
   const c = b.conditions;
   const meta = STATUS_META[rating.status];
-  // Hazard times in the HARBOR's own zone (Michigan's east shore keeps Eastern time).
-  const tz = harbor.timezone ?? "America/Chicago";
+  // Clock times in the HARBOR's own zone (Michigan's east shore keeps Eastern time): hazards,
+  // the observation time, sunrise/sunset, the discussion's issue time and the wind chart.
+  const tz = harbor.timezone ?? DEFAULT_TZ_FALLBACK;
   // Labelled with the zone ("EDT"): the hour strip below is still in Central.
   const when = (iso: string) =>
     new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short" })
@@ -177,7 +178,7 @@ export default function HarborDetail() {
                   ? " (forecast)"
                   : ""}{" "}
               ·{" "}
-              {c.observedAt ? fmtLocalTime(new Date(c.observedAt)) : "—"}
+              {c.observedAt ? fmtLocalTime(new Date(c.observedAt), tz) : "—"}
             </div>
           </div>
         </div>
@@ -371,7 +372,7 @@ export default function HarborDetail() {
 
         {/* Live wind */}
         <Panel title="Live wind — last 24 h">
-          <WindChart data={b.windHistory} />
+          <WindChart data={b.windHistory} tz={tz} />
           <div className="mt-2 flex gap-4 text-xs text-muted">
             <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 bg-brand" /> sustained</span>
             <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-4 border-t border-dashed border-brand/60" /> gust</span>
@@ -387,8 +388,8 @@ export default function HarborDetail() {
             <Stat label="Wave dir" value={c.waveDir != null ? degToCompass(c.waveDir) : "—"} />
             <Stat label="Water temp" value={c.waterTempF != null ? `${Math.round(c.waterTempF)}°F` : "—"} />
             <Stat label="Air temp" value={c.airTempF != null ? `${Math.round(c.airTempF)}°F` : "—"} />
-            <Stat label="Sunrise" value={fmtLocalTime(new Date(b.sun.sunrise))} />
-            <Stat label="Sunset" value={fmtLocalTime(new Date(b.sun.sunset))} />
+            <Stat label="Sunrise" value={fmtLocalTime(new Date(b.sun.sunrise), tz)} />
+            <Stat label="Sunset" value={fmtLocalTime(new Date(b.sun.sunset), tz)} />
           </dl>
         </Panel>
 
@@ -430,7 +431,7 @@ export default function HarborDetail() {
             <details>
               <summary className="cursor-pointer text-sm text-brand">
                 Read the LOT Area Forecast Discussion
-                {b.discussion.issued ? ` (issued ${fmtLocalTime(new Date(b.discussion.issued))})` : ""}
+                {b.discussion.issued ? ` (issued ${fmtLocalTime(new Date(b.discussion.issued), tz)})` : ""}
               </summary>
               <pre className="scroll-thin mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-sunken p-3 text-xs leading-relaxed text-fg">
                 {b.discussion.text}
