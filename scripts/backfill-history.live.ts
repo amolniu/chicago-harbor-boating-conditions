@@ -18,6 +18,7 @@
 import { describe, it, expect } from "vitest";
 import { HARBORS, type Harbor } from "@/lib/harbors";
 import { circularMeanDeg } from "@/lib/history";
+import { glosMs } from "@/lib/glos";
 import { rate } from "@/lib/rating";
 import { getBoat, DEFAULT_BOAT_ID, DEFAULT_SKILL } from "@/lib/boats";
 import type { Conditions } from "@/lib/types";
@@ -101,7 +102,8 @@ async function glosHours(
       if (!m) continue;
       for (const o of p.observations ?? []) {
         if (o.value == null) continue;
-        const t = new Date(o.timestamp).getTime();
+        // Bare "…T21:40:00" is UTC; new Date() would read it in this machine's zone.
+        const t = glosMs(o.timestamp);
         if (t >= cutoff) {
           // Apply the same plausibility clamp the live path uses for Spotter periods.
           if (m[1] === "wavePeriodS" && (o.value < 1 || o.value > 15)) continue;
