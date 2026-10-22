@@ -119,9 +119,13 @@ export function computeWindow(
 // Sunrise/sunset are for one day, and the forecast spans two. Shift them by whole days
 // to the day nearest the hour (by solar midday), then compare instants: no clock or
 // zone involved, so it holds in any browser. Sun times drift ~2 min/day — negligible.
+// An hour counts if it STARTS no more than 30 min before sunrise and ENDS no more than
+// 30 min after sunset, so "green through X" is never more than half an hour past dark.
+// Until 2026-10-21 the sunset side tested the hour's start: with a 6:54 PM sunset the
+// 7 PM hour counted, and the window read "Good to go now — green through 8 PM".
 function isDaylight(t: number, sunrise: Date, sunset: Date): boolean {
   const k = Math.round((t - (sunrise.getTime() + sunset.getTime()) / 2) / DAY_MS);
-  return t >= sunrise.getTime() + k * DAY_MS - HOUR_MS / 2 && t <= sunset.getTime() + k * DAY_MS + HOUR_MS / 2;
+  return t >= sunrise.getTime() + k * DAY_MS - HOUR_MS / 2 && t + HOUR_MS <= sunset.getTime() + k * DAY_MS + HOUR_MS / 2;
 }
 
 // A run is consecutive HOURS, not consecutive entries: with the night filtered out,

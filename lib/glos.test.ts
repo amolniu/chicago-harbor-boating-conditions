@@ -97,11 +97,20 @@ describe("GLOS timestamps", () => {
   ];
   const serve = (body: unknown) => vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => body })));
 
+  // Read as local time, a bare timestamp is only wrong OUTSIDE UTC — so pin a zone that
+  // isn't, or on a UTC machine (Linux, CI, production) these would pass against the bug.
+  let savedTz: string | undefined;
   beforeEach(() => {
+    savedTz = process.env.TZ;
+    process.env.TZ = "America/Detroit";
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    if (savedTz === undefined) delete process.env.TZ;
+    else process.env.TZ = savedTz;
+  });
 
   it("turns a bare Seagull timestamp into explicit UTC on observedAt and windObservedAt", async () => {
     serve(series({ 10: [["2026-10-21T21:40:00", 0.5]], 14: [["2026-10-21T21:40:00", 6.0]] }));

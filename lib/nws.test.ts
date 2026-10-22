@@ -532,6 +532,22 @@ describe("parseMarineForecast wave line", () => {
     expect(parseMarineForecast(mqt).waveText).toBe(null);
   });
 
+  it("reads light air, which has no unit, and a unit glued to its number", () => {
+    // GRR 2026-10-20 18:06Z and MKX 2026-10-20 10:10Z: 73 of 632 recent products read
+    // "No nearshore wave line" because of these. LOT writes "18ft" on rough days.
+    const grr = LMZ844_GRR.replace("Sunny.\nWaves 3 to 5 feet.", "Sunny. Waves\ncalm.");
+    const mkx = LMZ645_MKX.replace("Sunny.\nWaves 2 to 4 feet.", "Sunny. Waves nearly calm.");
+    const lot = LMZ741_LOT.replace("Sunny. Waves 2 to\n4 ft.", "Sunny. Waves 2 to\n4ft.");
+    for (const [edited, original] of [[grr, LMZ844_GRR], [mkx, LMZ645_MKX], [lot, LMZ741_LOT]]) {
+      expect(edited).not.toBe(original);
+    }
+    expect(parseMarineForecast(grr).waveText).toBe("Waves calm");
+    expect(parseMarineForecast(mkx).waveText).toBe("Waves nearly calm");
+    expect(parseMarineForecast(lot).waveText).toBe("Waves 2 to 4ft");
+    // ...without mistaking a word that merely ends in "ft" for the unit.
+    expect(parseMarineForecast(LMZ741_LOT.replace("Sunny. Waves 2 to\n4 ft.", "Sunny. Waves drift left.")).waveText).toBe(null);
+  });
+
   it("handles CRLF and the trailing spaces live products carry", () => {
     expect(parseMarineForecast(LMZ741_LOT.replace(/\n/g, "\r\n")).waveText).toBe("Waves 2 to 4 ft");
     expect(parseMarineForecast(LMZ741_LOT.replace(/\n/g, " \n")).waveText).toBe("Waves 2 to 4 ft");
