@@ -5,18 +5,18 @@ import type { ScoredHour } from "@/lib/window";
 import { STATUS_META } from "./status-meta";
 import { degToCompass } from "@/lib/units";
 
-const TZ = "America/Chicago";
-const fmtHour = (iso: string) =>
-  new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", hour12: true }).format(new Date(iso)).replace(" ", "");
+// In the harbor's own zone, like the window summary above it.
+const fmtHour = (iso: string, tz: string) =>
+  new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hour12: true }).format(new Date(iso)).replace(" ", "");
 
-export function HourStrip({ hours }: { hours: ScoredHour[] }) {
+export function HourStrip({ hours, tz }: { hours: ScoredHour[]; tz: string }) {
   if (!hours.length) return <div className="text-sm text-faint">No hourly forecast available.</div>;
   return (
     <div className="scroll-thin overflow-x-auto pb-1">
       <div className="flex gap-1">
         {hours.map((h) => (
-          <div key={h.time} className="flex w-11 shrink-0 flex-col items-center gap-1" title={`${fmtHour(h.time)} · ${Math.round(h.windKt)} kt ${degToCompass(h.windDir)} · ~${h.waveFt.toFixed(1)} ft`}>
-            <div className="text-[10px] text-faint">{fmtHour(h.time)}</div>
+          <div key={h.time} className="flex w-11 shrink-0 flex-col items-center gap-1" title={`${fmtHour(h.time, tz)} · ${Math.round(h.windKt)} kt ${degToCompass(h.windDir)} · ~${h.waveFt.toFixed(1)} ft`}>
+            <div className="text-[10px] text-faint">{fmtHour(h.time, tz)}</div>
             <div
               className={`h-8 w-full rounded ${STATUS_META[h.status].bar} ${h.daylight ? "" : "opacity-30"}`}
             />
