@@ -35,7 +35,7 @@ import {
   isEligibleReference,
   type ReferencePlatform,
 } from "@/lib/stationHealth";
-import { MAX_OBS_AGE_MS } from "@/lib/glos";
+import { MAX_OBS_AGE_MS, glosMs } from "@/lib/glos";
 
 const UA = process.env.NWS_USER_AGENT || "ChicagoHarborSailing/0.1 (station validator)";
 const MS_TO_KT = 1.94384;
@@ -233,7 +233,8 @@ async function glosWind(id: number, paramIndex: Map<number, string>, onlyParam?:
     for (const p of ds.parameters ?? []) {
       if (!wanted(p.parameter_id)) continue;
       for (const o of p.observations ?? []) {
-        const t = new Date(o.timestamp).getTime();
+        // Bare "…T21:40:00" is UTC; new Date() would read it in this machine's zone.
+        const t = glosMs(o.timestamp);
         if (o.value != null && t >= cutoff) out.push({ t, kt: o.value * MS_TO_KT });
       }
     }

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { getGlosCurrent, obsUrl } from "./glos";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { getGlosCurrent, getGlosRows, glosTime, obsUrl } from "./glos";
 
 const REF = { datasetId: 1, waveId: 10, periodId: 11, dirId: 12, tempId: 13 };
 
@@ -78,5 +78,63 @@ describe("getGlosCurrent", () => {
       json: async () => [{ parameters: [{ parameter_id: 10, observations: [{ timestamp: old, value: 0.5 }] }] }],
     })));
     expect(await getGlosCurrent(REF)).toBeNull();
+  });
+});
+
+// Seagull writes "2026-10-21T21:40:00" with no zone, and it is UTC. ECMAScript reads a bare
+// date-time in the RUNTIME's zone, so passed through raw the browser showed Escanaba's 21:40Z
+// observation as "10:40 PM" at 6:14 PM EDT — and the server was right only because Firebase
+// runs in UTC. These use the API's real bare format, unlike stub() above.
+describe("GLOS timestamps", () => {
+  const NOW = Date.UTC(2026, 9, 21, 22, 14); // 6:14 PM EDT
+  const series = (points: Record<number, [string, number][]>) => [
+    {
+      parameters: Object.entries(points).map(([id, obs]) => ({
+        parameter_id: Number(id),
+        observations: obs.map(([timestamp, value]) => ({ timestamp, value })),
+      })),
+    },
+  ];
+  const serve = (body: unknown) => vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => body })));
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("turns a bare Seagull timestamp into explicit UTC on observedAt and windObservedAt", async () => {
+    serve(series({ 10: [["2026-10-21T21:40:00", 0.5]], 14: [["2026-10-21T21:40:00", 6.0]] }));
+    const c = await getGlosCurrent({ ...REF, windId: 14 });
+    expect(c!.observedAt, "must carry its zone, or the browser reads it as local").toMatch(/Z$/);
+    expect(c!.observedAt).toBe("2026-10-21T21:40:00.000Z");
+    expect(c!.windObservedAt).toBe("2026-10-21T21:40:00.000Z");
+    expect(Date.parse(c!.observedAt!)).toBe(Date.UTC(2026, 9, 21, 21, 40));
+  });
+
+  it("judges freshness in UTC, whatever zone the server runs in", async () => {
+    // 4 h old in UTC. Read as Central it would be 23:10Z — in the future, so "fresh".
+    serve(series({ 10: [["2026-10-21T18:10:00", 0.5]] }));
+    expect(await getGlosCurrent(REF)).toBeNull();
+  });
+
+  it("picks the newest point by instant, not by how its string happens to be written", async () => {
+    // 21:50Z written with an offset sorts BEFORE bare 21:40 as a raw string ("17" < "21").
+    serve(series({ 10: [["2026-10-21T21:40:00", 0.5], ["2026-10-21T17:50:00-04:00", 0.9]] }));
+    const c = await getGlosCurrent(REF);
+    expect(c!.observedAt).toBe("2026-10-21T21:50:00.000Z");
+    expect(c!.waveFt).toBeCloseTo(0.9 * 3.28084, 2);
+  });
+
+  it("buckets health rows by the UTC hour", async () => {
+    serve(series({ 10: [["2026-10-21T21:40:00", 0.5]] }));
+    const rows = await getGlosRows(REF, 1);
+    expect(rows.map((r) => r.time)).toEqual([Date.UTC(2026, 9, 21, 21)]);
+  });
+
+  it("leaves an already-zoned timestamp's instant alone and rejects junk", () => {
+    expect(glosTime("2026-10-21T21:40:00Z")).toBe("2026-10-21T21:40:00.000Z");
+    expect(glosTime("2026-10-21T17:40:00-04:00")).toBe("2026-10-21T21:40:00.000Z");
+    expect(glosTime("not a time")).toBeNull();
   });
 });
