@@ -21,6 +21,8 @@
 //     values confirm it: metres for wave height, KELVIN for water temperature.
 //   • Spotter buoys are seasonal — they go dark over winter, so callers must degrade to
 //     the gridpoint model. getGlosCurrent returns null rather than stale data.
+//   • Timestamps carry NO zone designator ("2026-10-21T21:40:00") and are UTC. They are
+//     made explicit at the edge (glosTime / glosMs), so nothing downstream sees one bare.
 //
 // Server-only.
 
@@ -88,6 +90,31 @@ interface ObsDataset {
 
 const kelvinToF = (k: number) => ((k - 273.15) * 9) / 5 + 32;
 
+/** Ends in "Z" or a numeric offset, i.e. already says which zone it is in. */
+const HAS_ZONE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
+
+/**
+ * A GLOS timestamp as epoch ms (NaN if it doesn't parse).
+ *
+ * Seagull writes "2026-10-21T21:40:00" with no zone, and it is UTC: verified 2026-10-21,
+ * the Bay de Noc Spotter's newest point read 23:00 at 23:43Z (as Central it would sit five
+ * hours in the future), and GLOS's mirror of NDBC MNMM4 matched NDBC's wind speed and
+ * direction at the same UTC instant on 31 of 31 rows. But ECMAScript reads a date-time
+ * with no offset as the RUNTIME's local time, so passed through raw the browser showed
+ * Escanaba's 21:40Z observation as "10:40 PM" at 6:14 PM EDT, and the server's freshness
+ * and health bucketing were right only because Firebase happens to run in UTC.
+ */
+export function glosMs(timestamp: string): number {
+  return Date.parse(HAS_ZONE.test(timestamp) ? timestamp : `${timestamp}Z`);
+}
+
+/** A GLOS timestamp as an explicit UTC ISO string ("…T21:40:00.000Z"), or null if it
+ *  doesn't parse. Same shape NDBC's observedAt already has. */
+export function glosTime(timestamp: string): string | null {
+  const t = glosMs(timestamp);
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
 /**
  * The /obs URL for exactly the series a ref declares.
  *
@@ -105,7 +132,9 @@ export function obsUrl(ref: GlosWaveRef, startDate: string): string {
   return `${OBS_URL}?obsDatasetId=${ref.datasetId}&startDate=${startDate}&parameterId=${ids.join(",")}`;
 }
 
-/** Newest point of a series, or null if it's missing or stale. */
+/** Newest point of a series, or null if it's missing or stale. Expects timestamps already
+ *  normalized by glosTime: toISOString is fixed-width UTC, so comparing the strings orders
+ *  them by time — which raw API strings, mixing zoned and bare forms, would not promise. */
 function newest(params: Map<number, ObsPoint[]>, id: number | undefined, now: number): ObsPoint | null {
   if (id == null) return null;
   const pts = params.get(id);
@@ -116,7 +145,7 @@ function newest(params: Map<number, ObsPoint[]>, id: number | undefined, now: nu
     if (!best || p.timestamp > best.timestamp) best = p;
   }
   if (!best) return null;
-  return now - new Date(best.timestamp).getTime() > MAX_OBS_AGE_MS ? null : best;
+  return now - Date.parse(best.timestamp) > MAX_OBS_AGE_MS ? null : best;
 }
 
 /**
@@ -182,7 +211,7 @@ export async function getGlosRows(ref: GlosWaveRef, days = 10): Promise<BuoyRow[
       const [field, conv] = m;
       for (const o of p.observations ?? []) {
         if (o.value == null) continue;
-        const t = new Date(o.timestamp).getTime();
+        const t = glosMs(o.timestamp);
         if (!Number.isFinite(t)) continue;
         const bucket = Math.floor(t / BUCKET_MS) * BUCKET_MS;
         const row =
@@ -220,10 +249,16 @@ export async function getGlosCurrent(ref: GlosWaveRef): Promise<GlosCurrent | nu
   }
   if (!Array.isArray(data)) return null;
 
+  // Timestamps go explicit-UTC here, before anything compares or returns them; a point
+  // whose time doesn't parse can't be placed, so it is dropped rather than guessed.
   const params = new Map<number, ObsPoint[]>();
   for (const ds of data) {
     for (const p of ds.parameters ?? []) {
-      if (p.observations?.length) params.set(p.parameter_id, p.observations);
+      const pts = (p.observations ?? []).flatMap((o) => {
+        const timestamp = glosTime(o.timestamp);
+        return timestamp ? [{ timestamp, value: o.value }] : [];
+      });
+      if (pts.length) params.set(p.parameter_id, pts);
     }
   }
 

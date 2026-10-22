@@ -193,7 +193,7 @@ describe("resolving what applies to a harbor", () => {
 
 describe("review fixes (2026-10-18)", () => {
   const belmont = getHarbor("belmont")!;
-  const grandHaven = getHarbor("grand-haven")!; // LMZ847 + boundary LMZ846
+  const grandHaven = getHarbor("grand-haven")!; // LMZ846 + boundary LMZ847
 
   it("a Hurricane Force Wind Warning stays a STOP alert, not just the storm tier", () => {
     const hf = parseAlertFeature(feature({ event: "Hurricane Force Wind Warning", vtec: "/O.NEW.KLOT.HF.W.0001.000000T0000Z-261019T0300Z/", ugc: ["LMZ741"], ends: NOW + 6 * H }))!;

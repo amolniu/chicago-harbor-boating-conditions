@@ -203,6 +203,30 @@ export function marineHeadlines(text: string): string[] {
   return out;
 }
 
+// The wave line is the FIRST period's — the one covering now:
+//
+//   .REST OF TODAY...Southwest winds 15 to 25 kt. Sunny. Waves 2 to
+//   4 ft.
+//   .TONIGHT...Southwest winds 10 to 20 kt diminishing to around 10
+//   kt. Clear. Waves 2 to 4 ft subsiding to 1 to 2 ft.
+//
+// Its body runs to the next period line, a blank line or "$$", and wraps mid-sentence, so
+// a line-bound match skipped today's line and returned tonight's. Offices also disagree on
+// the unit: LOT and GRB write "ft"; GRR, IWX, MKX and MQT write "feet" and "foot" ("Waves 1
+// foot or less", "Waves calm to 1 foot"). Scoping to the period keeps out the header
+// boilerplate LOT and MQT print above the zones ("Waves are provided as a range of...").
+const FIRST_PERIOD = /^[ \t]*\.[A-Z][A-Z' ]*\.\.\.((?:[^\n]|\n(?![ \t]*(?:\n|\.|\$\$)))*)/m;
+const isWaveSentence = (s: string) => /\bwaves?\b/i.test(s) && /\b(?:ft|feet|foot)\b/i.test(s);
+
+/** The first period's wave sentence, whitespace-collapsed, without its closing period. */
+function firstPeriodWaves(text: string): string | null {
+  const body = text.replace(/\r\n?/g, "\n").match(FIRST_PERIOD)?.[1];
+  if (!body) return null;
+  // A sentence ends at a period followed by whitespace, so "1.5 ft" would stay whole.
+  const sentences = body.replace(/\s+/g, " ").split(/\.(?=\s|$)/);
+  return sentences.map((s) => s.trim()).find(isWaveSentence) ?? null;
+}
+
 /** Pure: nearshore marine text product → in-effect advisory level + a wave-forecast line. */
 export function parseMarineForecast(text: string): MarineForecast {
   const headlines = marineHeadlines(text);
@@ -218,11 +242,9 @@ export function parseMarineForecast(text: string): MarineForecast {
     }
   }
 
-  const waveMatch = text.match(/WAVES?\s+[^.\n]*?FT[^.\n]*/i);
-
   return {
     advisory,
-    waveText: waveMatch ? waveMatch[0].replace(/\s+/g, " ").trim() : null,
+    waveText: firstPeriodWaves(text),
     headline,
     raw: text,
   };

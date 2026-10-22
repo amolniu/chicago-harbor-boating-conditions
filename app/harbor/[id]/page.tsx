@@ -135,9 +135,10 @@ export default function HarborDetail() {
   const c = b.conditions;
   const meta = STATUS_META[rating.status];
   // Clock times in the HARBOR's own zone (Michigan's east shore keeps Eastern time): hazards,
-  // the observation time, sunrise/sunset, the discussion's issue time and the wind chart.
+  // the hour strip, the observation time, sunrise/sunset, the discussion's issue time and
+  // the wind chart.
   const tz = harbor.timezone ?? DEFAULT_TZ_FALLBACK;
-  // Labelled with the zone ("EDT"): the hour strip below is still in Central.
+  // Hazard times are labelled with the zone ("EDT").
   const when = (iso: string) =>
     new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short" })
       .format(new Date(iso))
@@ -281,7 +282,7 @@ export default function HarborDetail() {
         {/* Recommended sail window */}
         <Panel title="Recommended sail window" className="lg:col-span-2">
           <p className="mb-3 text-lg font-medium text-strong">{sail.summary}</p>
-          <HourStrip hours={sail.hours} />
+          <HourStrip hours={sail.hours} tz={tz} />
           <p className="mt-2 text-xs text-faint">
             Next 24 h, rated for your boat + skill. Dim cells are after dark. Wave heights in the forecast are
             wind-sea estimates.

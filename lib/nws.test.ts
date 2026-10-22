@@ -261,8 +261,280 @@ describe("parseMarineForecast", () => {
     expect(parseMarineForecast(GALE_WARNING.replace(/\n/g, "\r\n")).advisory).toBe("gale");
   });
 
-  it("still pulls the wave line", () => {
-    expect(parseMarineForecast(LMZ742_SCA_IN_EFFECT).waveText).toBe("Waves 3 to 6 ft occasionally to 8 ft");
+  it("still pulls the wave line, across its wrap", () => {
+    expect(parseMarineForecast(LMZ742_SCA_IN_EFFECT).waveText).toBe(
+      "Waves 3 to 6 ft occasionally to 8 ft subsiding to 3 to 5 ft",
+    );
+  });
+});
+
+// Live products, verbatim (trailing whitespace trimmed) as served by tgftp on 2026-10-18:
+// one zone per office that writes Lake Michigan nearshore text, because each phrases
+// waves its own way. LOT and GRB write "ft", the rest "feet" and "foot"; LOT and MQT
+// print wave boilerplate above the zones.
+const LMZ741_LOT = `Expires:202610182115;;311843
+FZUS53 KLOT 181418
+NSHLOT
+
+Nearshore Marine Forecast
+National Weather Service Chicago/Romeoville IL
+918 AM CDT Sun Oct 18 2026
+
+For waters within five nautical miles of shore on Lake Michigan
+
+Waves are provided as a range of significant wave heights, which
+is the average of the highest 1/3 of the waves, along with the
+average height of the highest 10 percent of the waves which will
+occasionally be encountered.
+
+
+LMZ740-741-182115-
+Winthrop Harbor to Wilmette Harbor IL-
+Wilmette Harbor to Northerly Island IL-
+918 AM CDT Sun Oct 18 2026
+
+.REST OF TODAY...Southwest winds 15 to 25 kt. Sunny. Waves 2 to
+4 ft.
+.TONIGHT...Southwest winds 10 to 20 kt diminishing to around 10
+kt. Clear. Waves 2 to 4 ft subsiding to 1 to 2 ft.
+.MONDAY...Southwest winds around 10 kt becoming southeast in the
+afternoon. Sunny. Waves 1 to 2 ft subsiding to 1 ft or less.
+.MONDAY NIGHT...Southeast winds less than 10 kt. Mostly clear.
+Waves 1 ft or less.
+
+
+$$
+`;
+
+const LMZ844_GRR = `Expires:202610190800;;317016
+FZUS53 KGRR 181706
+NSHGRR
+
+Nearshore Marine Forecast
+National Weather Service Grand Rapids MI
+105 PM EDT Sun Oct 18 2026
+
+For waters within five nautical miles of shore on Lake Michigan
+
+
+LMZ844-190800-
+St Joseph to South Haven MI-
+105 PM EDT Sun Oct 18 2026
+
+...SMALL CRAFT ADVISORY IN EFFECT UNTIL 11 PM EDT THIS EVENING...
+
+.THROUGH EARLY EVENING...Southwest winds 15 to 25 knots. Sunny.
+Waves 3 to 5 feet.
+.TONIGHT...South winds 10 to 20 knots. Clear. Waves 2 to 4 feet.
+.MONDAY...South winds 10 to 15 knots veering southwest 5 to 10 knots
+early in the afternoon. Sunny. Waves 1 to 3 feet.
+.MONDAY NIGHT...North winds around 5 knots veering east in the late
+evening and overnight. Mostly clear. Waves 1 foot or less.
+.TUESDAY...East winds around 5 knots backing north early in the
+afternoon. Sunny. Waves less than 1 foot.
+.TUESDAY NIGHT...Northeast winds around 5 knots veering southeast in
+the late evening and overnight. Mostly clear. Waves less than
+1 foot.
+.WEDNESDAY...South winds 5 to 10 knots veering southwest early in
+the afternoon. Sunny. Waves less than 1 foot.
+.THURSDAY...South winds around 5 knots veering northwest early in
+the afternoon. Sunny. Waves less than 1 foot.
+.FRIDAY...Southeast winds 5 to 10 knots. Sunny. Waves less than
+1 foot.
+
+$$
+`;
+
+const LMZ043_IWX = `Expires:202610182015;;312099
+FZUS53 KIWX 181431
+NSHIWX
+
+Nearshore Marine Forecast
+National Weather Service Northern Indiana
+1031 AM EDT Sun Oct 18 2026
+
+For waters within five nautical miles of shore on Lake Michigan
+
+
+LMZ043-046-182015-
+New Buffalo MI to St Joseph MI-Michigan City IN to New Buffalo MI-
+1031 AM EDT Sun Oct 18 2026
+
+.THIS AFTERNOON...Southwest winds 15 to 20 knots becoming south.
+Sunny. Waves 2 to 4 feet.
+.TONIGHT...South winds 5 to 15 knots becoming southwest. Mostly
+clear. Waves 1 to 3 feet.
+.MONDAY...South winds 5 to 10 knots becoming light and variable.
+Sunny. Waves 2 feet or less.
+.MONDAY NIGHT...Light and variable winds. Mostly clear. Waves
+1 foot or less.
+
+The water temperature at Michigan City is 60 degrees.
+
+$$
+`;
+
+const LMZ645_MKX = `Expires:202610182200;;315360
+FZUS53 KMKX 181610
+NSHMKX
+
+Nearshore Marine Forecast
+National Weather Service Milwaukee/Sullivan WI
+1110 AM CDT Sun Oct 18 2026
+
+For waters within five nautical miles of shore on Lake Michigan
+
+
+LMZ645-182200-
+North Point Light to Wind Point WI-
+1110 AM CDT Sun Oct 18 2026
+
+...SMALL CRAFT ADVISORY IN EFFECT UNTIL 7 PM CDT THIS EVENING...
+
+.REST OF TODAY...Southwest wind 10 to 20 knots becoming 15 to
+20 knots late in the afternoon. Gusts up to 25 knots. Sunny.
+Waves 2 to 4 feet.
+.TONIGHT...South wind 15 to 20 knots with gusts to around
+25 knots veering southwest with gusts to around 25 knots late in
+the evening, then becoming 10 to 20 knots with gusts to around
+25 knots after midnight becoming 10 to 15 knots early in the
+morning. Clear. Waves 2 to 4 feet subsiding to 1 to 2 feet early
+in the morning.
+.MONDAY...Southwest wind 10 to 15 knots easing to 5 to 10 knots
+late in the morning, then backing south early in the afternoon
+backing southeast late in the afternoon. Sunny. Waves around
+1 foot.
+.MONDAY NIGHT...Southeast wind 5 to 10 knots veering south late
+in the evening, then becoming southwest after midnight veering
+north early in the morning. Partly cloudy. Waves around 1 foot.
+
+$$
+`;
+
+const LMZ542_GRB = `Expires:202610182200;;317018
+FZUS53 KGRB 181706
+NSHGRB
+
+Nearshore Marine Forecast
+National Weather Service Green Bay WI
+1206 PM CDT Sun Oct 18 2026
+
+For waters within five nautical miles of shore on Lake Michigan
+
+
+LMZ542-543-182200-
+Sturgeon Bay to Two Rivers WI-Two Rivers to Sheboygan WI-
+1206 PM CDT Sun Oct 18 2026
+
+...SMALL CRAFT ADVISORY IN EFFECT THROUGH LATE TONIGHT...
+
+.THIS AFTERNOON...SW wind to 30 kts with gale force gusts to
+around 35 kts. Waves 4 to 7 ft. Sunny.
+.TONIGHT...SW wind 15 to 25 kts decreasing to 10 to 15 kts after
+midnight. Waves 4 to 7 ft subsiding to 3 to 5 ft after midnight.
+Clear.
+.MONDAY...SW wind 5 to 10 kts backing SE early in the afternoon.
+Waves 1 to 3 ft. Mostly sunny.
+.MONDAY NIGHT...S wind around 5 kts early in the evening becoming
+variable 10 kts or less. Waves 2 ft or less. Patchy fog after
+midnight.
+
+$$
+`;
+
+const LMZ221_MQT = `Expires:202610182000;;312829
+FZUS53 KMQT 181501
+NSHMQT
+
+Nearshore Marine Forecast
+National Weather Service Marquette MI
+1100 AM EDT Sun Oct 18 2026
+
+For waters within five nautical miles of shore
+
+Waves are the significant wave height - the average of the
+highest 1/3 of the wave spectrum. Occasional wave height is the
+average of the highest 1/10 of the wave spectrum.
+
+
+LMZ221-182000-
+Green Bay North of line from Cedar River MI to Rock Island
+Passage-
+1101 AM EDT Sun Oct 18 2026
+
+...SMALL CRAFT ADVISORY IN EFFECT THROUGH LATE TONIGHT...
+
+.REST OF TODAY...Southwest wind up to 30 knots. Mostly sunny.
+Waves 4 to 7 feet occasionally to 9 feet subsiding to 3 to 6 feet
+occasionally to 8 feet.
+.TONIGHT...Southwest wind 15 to 25 knots with gusts up to
+32 knots diminishing to 10 to 15 knots with gusts up to 22 knots
+late. Clear. Waves subsiding to 1 to 2 feet.
+.MONDAY...West wind less than 10 knots in the morning becoming
+variable. Mostly sunny. Waves 1 to 2 feet.
+.MONDAY NIGHT...Variable wind less than 10 knots. Mostly clear.
+Waves calm to 1 foot.
+
+$$
+`;
+
+/** `product` as if `period` were its first forecast period: the ones before it are dropped. */
+const startingAt = (product: string, period: string) => {
+  const at = product.indexOf(`\n.${period}...`);
+  if (at < 0) throw new Error(`no .${period}... period`);
+  return product.slice(0, product.search(/^\.[A-Z]/m)) + product.slice(at + 1);
+};
+
+describe("parseMarineForecast wave line", () => {
+  // The 2026-10-18 bugs: GRR and IWX write "feet", which a match on "FT" never found, so
+  // St. Joseph through Whitehall and New Buffalo had no wave line; and LOT's first line
+  // wraps ("Waves 2 to\n4 ft."), so Chicago showed TONIGHT's line instead of today's.
+  it.each([
+    { office: "LOT", product: LMZ741_LOT, want: "Waves 2 to 4 ft" },
+    { office: "GRR", product: LMZ844_GRR, want: "Waves 3 to 5 feet" },
+    { office: "IWX", product: LMZ043_IWX, want: "Waves 2 to 4 feet" },
+    { office: "MKX", product: LMZ645_MKX, want: "Waves 2 to 4 feet" },
+    { office: "GRB", product: LMZ542_GRB, want: "Waves 4 to 7 ft" },
+    {
+      office: "MQT",
+      product: LMZ221_MQT,
+      want: "Waves 4 to 7 feet occasionally to 9 feet subsiding to 3 to 6 feet occasionally to 8 feet",
+    },
+  ])("takes the first period's wave sentence from $office", ({ product, want }) => {
+    expect(parseMarineForecast(product).waveText).toBe(want);
+  });
+
+  it.each([
+    { office: "LOT", period: "MONDAY", product: LMZ741_LOT, want: "Waves 1 to 2 ft subsiding to 1 ft or less" },
+    { office: "GRR", period: "MONDAY NIGHT", product: LMZ844_GRR, want: "Waves 1 foot or less" },
+    { office: "GRR", period: "TUESDAY NIGHT", product: LMZ844_GRR, want: "Waves less than 1 foot" },
+    { office: "IWX", period: "MONDAY NIGHT", product: LMZ043_IWX, want: "Waves 1 foot or less" },
+    {
+      office: "MKX",
+      period: "TONIGHT",
+      product: LMZ645_MKX,
+      want: "Waves 2 to 4 feet subsiding to 1 to 2 feet early in the morning",
+    },
+    { office: "MKX", period: "MONDAY", product: LMZ645_MKX, want: "Waves around 1 foot" },
+    { office: "GRB", period: "MONDAY NIGHT", product: LMZ542_GRB, want: "Waves 2 ft or less" },
+    { office: "MQT", period: "TONIGHT", product: LMZ221_MQT, want: "Waves subsiding to 1 to 2 feet" },
+    { office: "MQT", period: "MONDAY NIGHT", product: LMZ221_MQT, want: "Waves calm to 1 foot" },
+  ])("reads $office $period when it leads: $want", ({ product, period, want }) => {
+    expect(parseMarineForecast(startingAt(product, period)).waveText).toBe(want);
+  });
+
+  it("returns null, not a later period or the header boilerplate, when the first period has no waves", () => {
+    const lot = LMZ741_LOT.replace("Sunny. Waves 2 to\n4 ft.", "Sunny.");
+    const mqt = LMZ221_MQT.replace(/Mostly sunny\.\nWaves[\s\S]*?8 feet\./, "Mostly sunny.");
+    expect(lot).not.toBe(LMZ741_LOT);
+    expect(mqt).not.toBe(LMZ221_MQT);
+    expect(parseMarineForecast(lot).waveText).toBe(null);
+    expect(parseMarineForecast(mqt).waveText).toBe(null);
+  });
+
+  it("handles CRLF and the trailing spaces live products carry", () => {
+    expect(parseMarineForecast(LMZ741_LOT.replace(/\n/g, "\r\n")).waveText).toBe("Waves 2 to 4 ft");
+    expect(parseMarineForecast(LMZ741_LOT.replace(/\n/g, " \n")).waveText).toBe("Waves 2 to 4 ft");
   });
 });
 

@@ -119,14 +119,25 @@ describe("marine zones (the water the harbor opens onto)", () => {
     expect(getHarbor("whitehall")!.marineZone).toBe("LMZ847");
   });
 
+  it("pins the post-deploy corrections of 2026-10-18", () => {
+    // Grand Haven: both pierheads sit in LMZ846; the 846/847 boundary reaches shore
+    // ~0.4 km north of the mouth. The downtown marina point is ~1 km north of the channel,
+    // which is how 847 got picked as primary.
+    expect(getHarbor("grand-haven")!.marineZone).toBe("LMZ846");
+    // Monroe: the 741/742 boundary runs east from Northerly Island ~0.5 km south of the
+    // south gap, so a southbound departure is in 742 within a kilometre — same water as Burnham.
+    expect(harborZones(getHarbor("monroe")!)).toContain("LMZ742");
+  });
+
   it("boundary harbors watch both zones", () => {
     const both: Record<string, string[]> = {
       burnham: ["LMZ742", "LMZ741"],
+      monroe: ["LMZ741", "LMZ742"],
       "north-point": ["LMZ646", "LMZ740"],
       "st-joseph": ["LMZ844", "LMZ043"],
       "new-buffalo": ["LMZ046", "LMZ043"],
       "south-haven": ["LMZ844", "LMZ845"],
-      "grand-haven": ["LMZ847", "LMZ846"],
+      "grand-haven": ["LMZ846", "LMZ847"],
       whitehall: ["LMZ847", "LMZ848"],
       "cedar-river": ["LMZ221", "LMZ521"],
     };

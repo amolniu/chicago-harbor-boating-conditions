@@ -78,7 +78,7 @@ interface SnapshotLike {
 const mean = (v: number[]) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : null);
 
 /** Local calendar date for a timestamp in the harbor's timezone. */
-function localDate(t: Date, timezone: string): string {
+export function localDate(t: Date, timezone: string): string {
   // en-CA formats as YYYY-MM-DD.
   return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(t);
 }
