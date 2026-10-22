@@ -9,7 +9,7 @@ import { ScoreBars } from "@/components/ScoreBars";
 import { WindChart } from "@/components/WindChart";
 import { HourStrip } from "@/components/HourStrip";
 import { STATUS_META, statusLabel } from "@/components/status-meta";
-import { getHarbor, windNeighbors } from "@/lib/harbors";
+import { getHarbor, windNeighbors, DEFAULT_DISCUSSION_OFFICE } from "@/lib/harbors";
 import { rate, forecastWindGap, lostSourceNote } from "@/lib/rating";
 import { activeAt } from "@/lib/alerts";
 import { computeWindow } from "@/lib/window";
@@ -431,7 +431,8 @@ export default function HarborDetail() {
           {b.discussion ? (
             <details>
               <summary className="cursor-pointer text-sm text-brand">
-                Read the LOT Area Forecast Discussion
+                {/* The API fetches this harbor's own office; the label hard-coded LOT for all 27. */}
+                Read the {harbor.discussionOffice ?? DEFAULT_DISCUSSION_OFFICE} Area Forecast Discussion
                 {b.discussion.issued ? ` (issued ${fmtLocalTime(new Date(b.discussion.issued), tz)})` : ""}
               </summary>
               <pre className="scroll-thin mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-sunken p-3 text-xs leading-relaxed text-fg">

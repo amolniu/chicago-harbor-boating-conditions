@@ -119,9 +119,13 @@ export function computeWindow(
 // Sunrise/sunset are for one day, and the forecast spans two. Shift them by whole days
 // to the day nearest the hour (by solar midday), then compare instants: no clock or
 // zone involved, so it holds in any browser. Sun times drift ~2 min/day — negligible.
+// An hour counts if it STARTS no more than 30 min before sunrise and ENDS no more than
+// 30 min after sunset, so "green through X" is never more than half an hour past dark.
+// Until 2026-10-21 the sunset side tested the hour's start: with a 6:54 PM sunset the
+// 7 PM hour counted, and the window read "Good to go now — green through 8 PM".
 function isDaylight(t: number, sunrise: Date, sunset: Date): boolean {
   const k = Math.round((t - (sunrise.getTime() + sunset.getTime()) / 2) / DAY_MS);
-  return t >= sunrise.getTime() + k * DAY_MS - HOUR_MS / 2 && t <= sunset.getTime() + k * DAY_MS + HOUR_MS / 2;
+  return t >= sunrise.getTime() + k * DAY_MS - HOUR_MS / 2 && t + HOUR_MS <= sunset.getTime() + k * DAY_MS + HOUR_MS / 2;
 }
 
 // A run is consecutive HOURS, not consecutive entries: with the night filtered out,
@@ -180,16 +184,22 @@ function summarize(scored: ScoredHour[], tz: string): string {
   // Today's best window first, even when tomorrow's is longer: at 3 PM, "go now, green
   // through 7 PM" beats "tomorrow 7 AM–3 PM". Tomorrow only when today has none.
   const todayHours = daytime.filter((h) => dayOf(h.time, c) === c.today);
-  const best = (target: Status) =>
-    [todayHours, daytime].map((hs) => bestRun(hs, target)).find((r) => r && r.length >= 2) ?? null;
-
-  const green = best("green");
-  if (green) {
-    if (green[0] === now) return `Good to go now — green through ${runEnd(green, c)}.`;
-    return isToday(green) ? `Best window today: ${runLabel(green, c)} (green).` : `Best window: ${runLabel(green, c)} (green).`;
+  const run = (hs: ScoredHour[], target: Status) => {
+    const r = bestRun(hs, target);
+    return r && r.length >= 2 ? r : null;
+  };
+  // Then "now", THEN tomorrow: in the last light hour today's run is a single hour, too
+  // short to be a window, and falling straight through to tomorrow put "Best window:
+  // tomorrow" under a green header. A better colour tomorrow still beats a worse one now.
+  const greenToday = run(todayHours, "green");
+  if (greenToday) {
+    if (greenToday[0] === now) return `Good to go now — green through ${runEnd(greenToday, c)}.`;
+    return `Best window today: ${runLabel(greenToday, c)} (green).`;
   }
   if (now?.status === "green") return "Green right now, but the good window is short — go soon.";
-  const yellow = best("yellow");
+  const greenLater = run(daytime, "green");
+  if (greenLater) return `Best window: ${runLabel(greenLater, c)} (green).`;
+  const yellow = run(todayHours, "yellow") ?? (now?.status === "yellow" ? [now] : null) ?? run(daytime, "yellow");
   if (yellow) {
     if (yellow[0] === now) return `Marginal now; sailable (yellow) until ${runEnd(yellow, c)}.`;
     return `No green window in the next 24 h. Best you'll get is yellow ${runLabel(yellow, c)}${isToday(yellow) ? " today" : ""}.`;

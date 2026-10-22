@@ -97,11 +97,24 @@ describe("GLOS timestamps", () => {
   ];
   const serve = (body: unknown) => vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => body })));
 
+  // Read as local time, a bare timestamp is only wrong OUTSIDE UTC — so pin a zone that
+  // isn't, or on a UTC machine (Linux, CI, production) these would pass against the bug.
+  // Restore by ASSIGNING the zone we started in: deleting TZ doesn't make Node re-detect
+  // it, so later tests in this process would quietly run in Detroit.
+  let restoreTz = "";
   beforeEach(() => {
+    restoreTz = process.env.TZ ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    process.env.TZ = "America/Detroit";
+    // Assigning TZ only takes effect in a child process (vitest's default "forks" pool), not
+    // in a worker thread — fail loudly rather than pass against the bug under another pool.
+    expect(new Date(NOW).getTimezoneOffset(), "the TZ pin took effect").toBe(240);
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(NOW);
   });
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    process.env.TZ = restoreTz;
+  });
 
   it("turns a bare Seagull timestamp into explicit UTC on observedAt and windObservedAt", async () => {
     serve(series({ 10: [["2026-10-21T21:40:00", 0.5]], 14: [["2026-10-21T21:40:00", 6.0]] }));

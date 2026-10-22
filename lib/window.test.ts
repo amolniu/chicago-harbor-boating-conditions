@@ -78,11 +78,12 @@ describe("the sail window follows the live forecast-wind cap", () => {
 
 // Until 2026-10-20 a run counted consecutive DAYLIGHT entries, so with the night filtered
 // out today's 6 PM sat next to tomorrow's 7 AM: "Best window today: 4 PM–10 AM" on
-// production. One letter per forecast hour: g = calm (green), r = rough.
+// production. One letter per forecast hour: g = calm (green), y = marginal, r = rough.
 const CALM = { windDir: 250, windKt: 6, gustKt: 8, waveFt: 0.5 };
 const ROUGH = { windDir: 250, windKt: 28, gustKt: 36, waveFt: 6 };
+const MARGINAL = { windDir: 250, windKt: 18, gustKt: 22, waveFt: 2.5 };
 const forecastFrom = (startUtc: number, pattern: string): ForecastHour[] =>
-  [...pattern].map((ch, i) => ({ time: new Date(startUtc + i * 3600_000).toISOString(), ...(ch === "g" ? CALM : ROUGH) }));
+  [...pattern].map((ch, i) => ({ time: new Date(startUtc + i * 3600_000).toISOString(), ...(ch === "g" ? CALM : ch === "y" ? MARGINAL : ROUGH) }));
 // Sunday 2026-10-18: light from 7 AM to 6 PM Central, so 7 AM–6 PM are the daylight hours.
 const SUNRISE = new Date(Date.UTC(2026, 9, 18, 12)); // 07:00 CDT
 const SUNSET = new Date(Date.UTC(2026, 9, 18, 23)); // 18:00 CDT
@@ -96,7 +97,7 @@ describe("the sail window keeps today and tomorrow apart", () => {
   it("a window that runs into sunset stops there — it doesn't resume tomorrow morning", () => {
     const w = computeWindow(getHarbor("montrose")!, forecastFrom(at(18), SPANS_THE_NIGHT), catalina, "intermediate", SUNRISE, SUNSET);
     expect(w.hours.map((h) => h.status[0]).join(""), "the fixture rates as drawn").toBe(SPANS_THE_NIGHT);
-    expect(w.summary).toBe("Best window today: 4–7\u00a0PM (green).");
+    expect(w.summary).toBe("Best window today: 4–6\u00a0PM (green).");
   });
 
   it("a window that exists only tomorrow says so", () => {
@@ -116,19 +117,59 @@ describe("the sail window keeps today and tomorrow apart", () => {
   it("'Good to go now' ends at sunset, not at tomorrow's last green hour", () => {
     // Southport, advanced, 10 AM and calm for 24 h: it said "green through 10 AM" (tomorrow).
     const w = computeWindow(getHarbor("southport")!, forecastFrom(at(15), "g".repeat(24)), catalina, "advanced", SUNRISE, SUNSET);
-    expect(w.summary).toBe("Good to go now — green through 7\u00a0PM.");
+    expect(w.summary).toBe("Good to go now — green through 6\u00a0PM.");
   });
 
   it("today's window comes first even when tomorrow's is longer", () => {
     // 3 PM, green until sunset; tomorrow green all morning. "Go now" beats "tomorrow".
     const w = computeWindow(getHarbor("montrose")!, forecastFrom(at(20), "g".repeat(24)), catalina, "intermediate", SUNRISE, SUNSET);
-    expect(w.summary).toBe("Good to go now — green through 7\u00a0PM.");
+    expect(w.summary).toBe("Good to go now — green through 6\u00a0PM.");
   });
 
+  it("a run breaks at a gap in time, not just at a change of status", () => {
+    // Today's only green hour is the last light one (5 PM); tomorrow is green 7–10 AM.
+    // Joined across the night they were "Best window today: 5 PM–10 AM".
+    const overnight = computeWindow(getHarbor("montrose")!, forecastFrom(at(20), "rr" + "g".repeat(17) + "r".repeat(5)), catalina, "intermediate", SUNRISE, SUNSET);
+    expect(overnight.summary).toBe("Best window: tomorrow 7–10\u00a0AM (green).");
+    // NWS sometimes skips an hour; 1 PM and 3 PM aren't adjacent either.
+    const missing = forecastFrom(at(15), "g".repeat(24)).filter((_, i) => i !== 4);
+    const gap = computeWindow(getHarbor("montrose")!, missing, catalina, "intermediate", SUNRISE, SUNSET);
+    expect(gap.summary).toBe("Good to go now — green through 2\u00a0PM.");
+  });
+
+  it("'green through' never runs more than half an hour past sunset, and after it isn't 'now'", () => {
+    // Grand Haven, 2026-10-21: sunrise 8:06 AM, sunset 6:54 PM EDT. The 7 PM hour used to
+    // count as daylight, so a calm evening read "Good to go now — green through 8 PM".
+    const rise = new Date(Date.UTC(2026, 9, 21, 12, 6));
+    const set = new Date(Date.UTC(2026, 9, 21, 22, 54));
+    const gh = getHarbor("grand-haven")!;
+    const from4pm = computeWindow(gh, forecastFrom(Date.UTC(2026, 9, 21, 20), "g".repeat(24)), catalina, "intermediate", rise, set);
+    expect(from4pm.summary).toBe("Good to go now — green through 7\u00a0PM.");
+    const from7pm = computeWindow(gh, forecastFrom(Date.UTC(2026, 9, 21, 23), "g".repeat(24)), catalina, "intermediate", rise, set);
+    expect(from7pm.hours[0].daylight).toBe(false);
+    expect(from7pm.summary).not.toMatch(/now/i);
+  });
+  it("in the last light hour, it's still about now — not tomorrow", () => {
+    // Grand Haven 2026-10-21 at 6 PM, sunset 6:54: today's only daylight hour left is this
+    // one, too short to be a window, and the panel pointed at tomorrow under a green header.
+    const rise = new Date(Date.UTC(2026, 9, 21, 12, 6));
+    const set = new Date(Date.UTC(2026, 9, 21, 22, 54));
+    const gh = getHarbor("grand-haven")!;
+    const from6pm = (pattern: string) => forecastFrom(Date.UTC(2026, 9, 21, 22), pattern);
+    const calm = computeWindow(gh, from6pm("g".repeat(24)), catalina, "intermediate", rise, set);
+    expect(calm.summary).toBe("Green right now, but the good window is short — go soon.");
+    // Same for a marginal evening: say so, rather than "best you'll get is yellow tomorrow".
+    const marginal = computeWindow(gh, from6pm("y".repeat(24)), catalina, "intermediate", rise, set);
+    expect(marginal.hours[0].status, "the fixture rates as drawn").toBe("yellow");
+    expect(marginal.summary).toBe("Marginal now; sailable (yellow) until 7\u00a0PM.");
+    // A better window tomorrow still wins over a marginal last hour, as before.
+    const better = computeWindow(gh, from6pm("y".repeat(14) + "g".repeat(10)), catalina, "intermediate", rise, set);
+    expect(better.summary).toMatch(/^Best window: tomorrow/);
+  });
   it("times read in the harbor's own zone — Michigan's east shore is Eastern", () => {
-    // The same instants as the Montrose case: 4–7 PM Central is 5–8 PM in Grand Haven.
+    // The same instants as the Montrose case: 4–6 PM Central is 5–7 PM in Grand Haven.
     const w = computeWindow(getHarbor("grand-haven")!, forecastFrom(at(18), SPANS_THE_NIGHT), catalina, "intermediate", SUNRISE, SUNSET);
     expect(w.hours[3].hour).toBe(17);
-    expect(w.summary).toBe("Best window today: 5–8\u00a0PM (green).");
+    expect(w.summary).toBe("Best window today: 5–7\u00a0PM (green).");
   });
 });

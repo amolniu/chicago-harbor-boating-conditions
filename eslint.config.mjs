@@ -15,6 +15,9 @@ const eslintConfig = defineConfig([
     // Deploy artifacts (generated bundles — not our source):
     ".firebase/**",
     ".vercel/**",
+    // Agent worktrees: each is a full checkout with its own .next, so linting the repo
+    // root swept in tens of thousands of problems from other branches and builds.
+    ".claude/**",
   ]),
 ]);
 

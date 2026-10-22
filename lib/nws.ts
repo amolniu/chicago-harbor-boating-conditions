@@ -215,8 +215,10 @@ export function marineHeadlines(text: string): string[] {
 // the unit: LOT and GRB write "ft"; GRR, IWX, MKX and MQT write "feet" and "foot" ("Waves 1
 // foot or less", "Waves calm to 1 foot"). Scoping to the period keeps out the header
 // boilerplate LOT and MQT print above the zones ("Waves are provided as a range of...").
+// Light air has no unit at all — GRR "Waves calm.", MKX "Waves nearly calm." — and LOT
+// sometimes glues the unit to the number ("occasionally to 18ft"), where \b can't see it.
 const FIRST_PERIOD = /^[ \t]*\.[A-Z][A-Z' ]*\.\.\.((?:[^\n]|\n(?![ \t]*(?:\n|\.|\$\$)))*)/m;
-const isWaveSentence = (s: string) => /\bwaves?\b/i.test(s) && /\b(?:ft|feet|foot)\b/i.test(s);
+const isWaveSentence = (s: string) => /\bwaves?\b/i.test(s) && /(?<![a-z])(?:ft|feet|foot)\b|\bcalm\b/i.test(s);
 
 /** The first period's wave sentence, whitespace-collapsed, without its closing period. */
 function firstPeriodWaves(text: string): string | null {
