@@ -6,9 +6,8 @@ interface Point {
   gustKt: number | null;
 }
 
-const TZ = "America/Chicago";
-
-export function WindChart({ data }: { data: Point[] }) {
+// Axis ticks in the harbor's own zone, like every other clock time on the page.
+export function WindChart({ data, tz }: { data: Point[]; tz: string }) {
   const pts = data.filter((d) => d.windKt != null);
   if (pts.length < 2) {
     return <div className="grid h-40 place-items-center text-sm text-faint">No recent wind observations.</div>;
@@ -31,7 +30,7 @@ export function WindChart({ data }: { data: Point[] }) {
 
   const gridVals = [0, Math.round(maxKt / 2), Math.round(maxKt)];
   const fmt = (iso: string) =>
-    new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", hour12: true }).format(new Date(iso));
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", hour12: true }).format(new Date(iso));
 
   const ticks = [0, Math.floor((pts.length - 1) / 2), pts.length - 1];
 

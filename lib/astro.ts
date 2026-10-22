@@ -12,8 +12,8 @@ export function getSunTimes(lat: number, lon: number, date = new Date()): SunTim
   return { sunrise: t.sunrise, sunset: t.sunset };
 }
 
-const TZ = "America/Chicago";
-
-export function fmtLocalTime(d: Date): string {
-  return new Intl.DateTimeFormat("en-US", { timeZone: TZ, hour: "numeric", minute: "2-digit", hour12: true }).format(d);
+/** Clock time in the HARBOR's zone — Michigan's east shore keeps Eastern time. No
+ *  default: a forgotten zone would silently read an hour off there. */
+export function fmtLocalTime(d: Date, tz: string): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(d);
 }
