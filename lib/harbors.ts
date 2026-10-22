@@ -330,6 +330,9 @@ export const HARBORS: Harbor[] = [
     buoyStation: "45198",
     waveBuoy: { station: "45198", km: 4 },
     marineZone: "LMZ741",
+    // Boundary harbor: the 741/742 boundary runs east from Northerly Island ~0.5 km south
+    // of the south gap, so a southbound departure is in 742 within a kilometre.
+    alertZones: ["LMZ742"],
     notes: {
       entrance: "A large open mooring field behind the outer breakwater; more exposed than the slip harbors.",
       docking: "Star-dock moorings with a tender; an easterly crosswind at the gap makes picking up the can tricky.",
@@ -679,9 +682,11 @@ export const HARBORS: Harbor[] = [
     // temp because it sits 8 km off this harbor while 45161 is a shared regional buoy.
     // Spotters are seasonal — when it's pulled for winter this falls back to the model.
     waveBuoy: { km: 8, glos: { datasetId: 671, waveId: 9494, periodId: 9501, dirId: 9495, tempId: 9491 } },
-    marineZone: "LMZ847",
-    // Boundary harbor: the river mouth is the 846/847 boundary; the south pierhead sits in 846.
-    alertZones: ["LMZ846"],
+    // Both pierheads sit in 846 (checked 2026-10-18); the marina point is ~1 km north of the
+    // channel, which is how 847 was first picked.
+    marineZone: "LMZ846",
+    // Boundary harbor: the 846/847 boundary reaches shore ~0.4 km north of the mouth.
+    alertZones: ["LMZ847"],
     discussionOffice: "GRR",
     radarStation: "KGRR",
     webcamUrl: "",
